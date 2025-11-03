@@ -964,6 +964,7 @@ var AlgoliaBundle = (() => {
       this.insertRecentlyViewedSection(container, relatedSection);
       window.salla?.event?.dispatch("twilight::mutation");
       this.setupStockFilter(recentSlider);
+      this.applyOrderToList(recentSlider, filteredRecent);
     }
     insertRecentlyViewedSection(container, relatedSection) {
       const productDetails = document.querySelector(".product-details, .product-entry, #product-entry");
@@ -1080,6 +1081,7 @@ var AlgoliaBundle = (() => {
         }
         window.salla?.event?.dispatch("twilight::mutation");
         this.setupStockFilter(newSlider);
+        this.applyOrderToList(newSlider, numericIds);
       } catch {
       }
     }
@@ -1106,6 +1108,49 @@ var AlgoliaBundle = (() => {
       this.initialized = false;
       this.productId = null;
       this.removeExistingRecentlyViewed();
+    }
+    applyOrderToList(container, ids, maxAttempts = 30) {
+      if (!container || !ids || !ids.length) return;
+      let attempt = 0;
+      const intervalId = setInterval(() => {
+        attempt++;
+        const cards = Array.from(container.querySelectorAll(
+          "custom-salla-product-card, .s-product-card-entry"
+        ));
+        if (cards.length > 0) {
+          clearInterval(intervalId);
+          const cardMap = /* @__PURE__ */ new Map();
+          cards.forEach((card) => {
+            let productId = null;
+            if (card.dataset.id) {
+              productId = card.dataset.id;
+            } else if (card.id && !isNaN(card.id)) {
+              productId = card.id;
+            } else {
+              const link = card.querySelector(".s-product-card-image a, .s-product-card-content-title a");
+              if (link?.href) {
+                const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
+                if (match) productId = match[1];
+              }
+            }
+            if (productId) {
+              cardMap.set(String(productId), card);
+            }
+          });
+          const parent = cards[0].parentNode;
+          if (!parent) return;
+          ids.forEach((redisId) => {
+            const card = cardMap.get(String(redisId));
+            if (card && parent.contains(card)) {
+              parent.appendChild(card);
+            }
+          });
+          console.log("[Product Recommendations] Reordered", cards.length, "cards to match Algolia ranking");
+        } else if (attempt >= maxAttempts) {
+          clearInterval(intervalId);
+          console.warn("[Product Recommendations] Cards never appeared, skipping reorder");
+        }
+      }, 100);
     }
     waitForElement(selector, callback) {
       const element = document.querySelector(selector);
