@@ -88,8 +88,7 @@ class ProductRecommendations {
         this.insertRecentlyViewedSection(container, relatedSection);
 
         window.salla?.event?.dispatch('twilight::mutation');
-        this.setupStockFilter(recentSlider);
-        this.applyOrderToList(recentSlider, filteredRecent);
+        this.setupStockFilter(recentSlider, filteredRecent);
     }
     
     insertRecentlyViewedSection(container, relatedSection) {
@@ -238,34 +237,43 @@ class ProductRecommendations {
             }
             
             window.salla?.event?.dispatch('twilight::mutation');
-            this.setupStockFilter(newSlider);
-            this.applyOrderToList(newSlider, numericIds);
+            this.setupStockFilter(newSlider, numericIds);
         } catch {
         }
     }
     
-    setupStockFilter(slider) {
-        window.salla?.event?.on('salla-products-slider::products.fetched', event => {
+    setupStockFilter(slider, productIds = null) {
+        const handler = (event) => {
             if (!slider.contains(event.target)) return;
-            
+
+            // Unregister immediately to prevent multiple firings
+            window.salla?.event?.off('salla-products-slider::products.fetched', handler);
+
             setTimeout(() => {
                 const productCards = slider.querySelectorAll('.s-product-card-entry');
                 if (!productCards.length) return;
-                
+
                 let inStockCount = 0;
                 const maxProducts = 15;
-                
+
                 productCards.forEach(card => {
                     const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-                    
+
                     if (isOutOfStock || inStockCount >= maxProducts) {
                         card.style.display = 'none';
                     } else {
                         inStockCount++;
                     }
                 });
+
+                // CRITICAL: Reorder cards AFTER stock filtering to preserve Algolia ranking
+                if (productIds && productIds.length) {
+                    this.applyOrderToList(slider, productIds, 5);
+                }
             }, 200);
-        });
+        };
+
+        window.salla?.event?.on('salla-products-slider::products.fetched', handler);
     }
     
     reset() {

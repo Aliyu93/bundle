@@ -963,8 +963,7 @@ var AlgoliaBundle = (() => {
       container.appendChild(recentSlider);
       this.insertRecentlyViewedSection(container, relatedSection);
       window.salla?.event?.dispatch("twilight::mutation");
-      this.setupStockFilter(recentSlider);
-      this.applyOrderToList(recentSlider, filteredRecent);
+      this.setupStockFilter(recentSlider, filteredRecent);
     }
     insertRecentlyViewedSection(container, relatedSection) {
       const productDetails = document.querySelector(".product-details, .product-entry, #product-entry");
@@ -1080,14 +1079,14 @@ var AlgoliaBundle = (() => {
           document.head.appendChild(styleEl);
         }
         window.salla?.event?.dispatch("twilight::mutation");
-        this.setupStockFilter(newSlider);
-        this.applyOrderToList(newSlider, numericIds);
+        this.setupStockFilter(newSlider, numericIds);
       } catch {
       }
     }
-    setupStockFilter(slider) {
-      window.salla?.event?.on("salla-products-slider::products.fetched", (event) => {
+    setupStockFilter(slider, productIds = null) {
+      const handler = (event) => {
         if (!slider.contains(event.target)) return;
+        window.salla?.event?.off("salla-products-slider::products.fetched", handler);
         setTimeout(() => {
           const productCards = slider.querySelectorAll(".s-product-card-entry");
           if (!productCards.length) return;
@@ -1101,8 +1100,12 @@ var AlgoliaBundle = (() => {
               inStockCount++;
             }
           });
+          if (productIds && productIds.length) {
+            this.applyOrderToList(slider, productIds, 5);
+          }
         }, 200);
-      });
+      };
+      window.salla?.event?.on("salla-products-slider::products.fetched", handler);
     }
     reset() {
       this.initialized = false;
