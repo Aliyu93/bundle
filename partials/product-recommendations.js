@@ -16,11 +16,15 @@ class ProductRecommendations {
     }
     
     initialize() {
-        if (this.initialized || !this.isProductPage()) return;
+        if (!this.isProductPage()) return;
 
-        this.productId = this.getProductId();
-        if (!this.productId) return;
+        const currentProductId = this.getProductId();
+        if (!currentProductId) return;
 
+        // Only skip if already initialized for THIS exact product
+        if (this.initialized && this.productId === currentProductId) return;
+
+        this.productId = currentProductId;
         this.initialized = true;
         this.addToRecentlyViewed(this.productId);
 

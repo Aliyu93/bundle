@@ -913,19 +913,10 @@ var AlgoliaBundle = (() => {
       this.recentlyViewedClass = "algolia-recently-viewed";
     }
     initialize() {
-      if (!this.isProductPage()) {
-        this.productId = null;
-        this.initialized = false;
-        return;
-      }
+      if (!this.isProductPage()) return;
       const currentProductId = this.getProductId();
-      if (!currentProductId) {
-        this.initialized = false;
-        return;
-      }
-      if (this.initialized && this.productId === currentProductId) {
-        return;
-      }
+      if (!currentProductId) return;
+      if (this.initialized && this.productId === currentProductId) return;
       this.productId = currentProductId;
       this.initialized = true;
       this.addToRecentlyViewed(this.productId);
@@ -1045,7 +1036,12 @@ var AlgoliaBundle = (() => {
     }
     async replaceRelatedProducts(element) {
       try {
-        const recommendedIds = await redisService.getRecommendations(this.productId);
+        const requestedProductId = this.productId;
+        const recommendedIds = await redisService.getRecommendations(requestedProductId);
+        if (requestedProductId !== this.productId) {
+          console.log("[Bundle Recommendations] Product changed during fetch, aborting");
+          return;
+        }
         if (!recommendedIds?.length) return;
         const numericIds = recommendedIds.map((id) => parseInt(id, 10)).filter((id) => id && !isNaN(id));
         if (!numericIds.length) return;
@@ -2323,5 +2319,16 @@ var AlgoliaBundle = (() => {
       product_recommendations_default.initialize();
     }, 1e3);
     setTimeout(runCartAddonsInjection, 500);
+  });
+  document.addEventListener("theme::ready", () => {
+    if (!document.querySelector('[id^="product-"]')) return;
+    const currentProductId = product_recommendations_default.getProductId();
+    if (currentProductId && currentProductId !== product_recommendations_default.productId) {
+      console.log("[Algolia Bundle] New product detected via theme::ready, re-initializing");
+      product_recommendations_default.reset();
+      setTimeout(() => {
+        product_recommendations_default.initialize();
+      }, 1e3);
+    }
   });
 })();

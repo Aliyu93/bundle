@@ -281,3 +281,20 @@ document.addEventListener('salla::page::changed', () => {
 
   setTimeout(runCartAddonsInjection, 500);
 });
+
+// Fallback: Also listen for theme::ready (fires on every page load)
+// This handles cases where salla::page::changed doesn't fire (full page reloads)
+document.addEventListener('theme::ready', () => {
+  if (!document.querySelector('[id^="product-"]')) return;
+
+  const currentProductId = productRecommendations.getProductId();
+
+  // Check if we're on a different product than the one already initialized
+  if (currentProductId && currentProductId !== productRecommendations.productId) {
+    console.log('[Algolia Bundle] New product detected via theme::ready, re-initializing');
+    productRecommendations.reset();
+    setTimeout(() => {
+      productRecommendations.initialize();
+    }, 1000);
+  }
+});
