@@ -289,8 +289,13 @@ document.addEventListener('theme::ready', () => {
 
   const currentProductId = productRecommendations.getProductId();
 
-  // Check if we're on a different product than the one already initialized
-  if (currentProductId && currentProductId !== productRecommendations.productId) {
+  // Skip if already initialized for this exact product
+  if (currentProductId && productRecommendations.productId && currentProductId === productRecommendations.productId) {
+    return; // Same product, already showing correct recommendations
+  }
+
+  // Different product or not initialized yet - proceed with re-initialization
+  if (currentProductId) {
     console.log('[Algolia Bundle] New product detected via theme::ready, re-initializing');
     productRecommendations.reset();
     setTimeout(() => {

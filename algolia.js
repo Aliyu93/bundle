@@ -2323,7 +2323,10 @@ var AlgoliaBundle = (() => {
   document.addEventListener("theme::ready", () => {
     if (!document.querySelector('[id^="product-"]')) return;
     const currentProductId = product_recommendations_default.getProductId();
-    if (currentProductId && currentProductId !== product_recommendations_default.productId) {
+    if (currentProductId && product_recommendations_default.productId && currentProductId === product_recommendations_default.productId) {
+      return;
+    }
+    if (currentProductId) {
       console.log("[Algolia Bundle] New product detected via theme::ready, re-initializing");
       product_recommendations_default.reset();
       setTimeout(() => {
