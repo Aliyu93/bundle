@@ -16,23 +16,11 @@ class ProductRecommendations {
     }
     
     initialize() {
-        if (!this.isProductPage()) {
-            this.productId = null;
-            this.initialized = false;
-            return;
-        }
+        if (this.initialized || !this.isProductPage()) return;
 
-        const currentProductId = this.getProductId();
-        if (!currentProductId) {
-            this.initialized = false;
-            return;
-        }
+        this.productId = this.getProductId();
+        if (!this.productId) return;
 
-        if (this.initialized && this.productId === currentProductId) {
-            return;
-        }
-
-        this.productId = currentProductId;
         this.initialized = true;
         this.addToRecentlyViewed(this.productId);
 
@@ -40,7 +28,7 @@ class ProductRecommendations {
             this.loadRecommendations();
             this.loadRecentlyViewed();
         };
-        
+
         if (document.readyState === 'complete' || document.readyState === 'interactive') {
             loadComponents();
         } else {
@@ -189,14 +177,21 @@ class ProductRecommendations {
     
     async replaceRelatedProducts(element) {
         try {
-            const recommendedIds = await redisService.getRecommendations(this.productId);
-            
+            const requestedProductId = this.productId;
+            const recommendedIds = await redisService.getRecommendations(requestedProductId);
+
+            // Validate that product hasn't changed during async request
+            if (requestedProductId !== this.productId) {
+                console.log('[Bundle Recommendations] Product changed during fetch, aborting');
+                return;
+            }
+
             if (!recommendedIds?.length) return;
-            
+
             const numericIds = recommendedIds
                 .map(id => parseInt(id, 10))
                 .filter(id => id && !isNaN(id));
-                
+
             if (!numericIds.length) return;
             
             const newSlider = document.createElement('salla-products-slider');
