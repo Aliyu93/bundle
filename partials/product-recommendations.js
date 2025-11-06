@@ -1,6 +1,6 @@
 /**
  * Product Recommendations
- *
+ * 
  * A lightweight component to replace Salla's default product recommendations
  * with data from Redis for related products.
  */
@@ -13,11 +13,11 @@ class ProductRecommendations {
         this.recentlyViewedKey = 'recently_viewed_products';
         this.maxRecentProducts = 15;
         this.recentlyViewedClass = 'algolia-recently-viewed';
-        this.customSliderContainer = null;
-        this.customSwiper = null;
-        this.hiddenOriginalSlider = null;
+        this.orderObservers = new Map();
+        this.orderTimers = new Map();
+        this.reorderingWrappers = new WeakSet();
     }
-
+    
     initialize() {
         if (!this.isProductPage()) return;
 
@@ -42,10 +42,10 @@ class ProductRecommendations {
             document.addEventListener('DOMContentLoaded', loadComponents);
         }
     }
-
+    
     loadRecommendations() {
         const relatedSection = document.querySelector('salla-products-slider[source="related"]');
-
+        
         if (relatedSection) {
             this.replaceRelatedProducts(relatedSection);
         } else {
@@ -54,16 +54,16 @@ class ProductRecommendations {
             });
         }
     }
-
+    
     loadRecentlyViewed() {
         const recentlyViewed = this.getRecentlyViewed();
-
+        
         if (!recentlyViewed.length) return;
-
+        
         const filteredRecent = recentlyViewed
             .map(id => parseInt(id, 10))
             .filter(id => id && !isNaN(id) && id !== parseInt(this.productId, 10));
-
+            
         if (!filteredRecent.length) return;
 
         this.removeExistingRecentlyViewed();
@@ -71,78 +71,78 @@ class ProductRecommendations {
         const container = document.createElement('div');
         container.className = 'mt-8 s-products-slider-container';
         container.classList.add(this.recentlyViewedClass);
-
+        
         const title = document.createElement('h2');
         title.className = 'section-title mb-5 font-bold text-xl';
         title.textContent = 'المنتجات المشاهدة مؤخراً';
         container.appendChild(title);
-
+        
         const recentSlider = document.createElement('salla-products-slider');
         recentSlider.setAttribute('source', 'selected');
         recentSlider.setAttribute('source-value', JSON.stringify(filteredRecent));
         recentSlider.setAttribute('autoplay', 'false');
         recentSlider.setAttribute('class', 'product-recommendations-slider');
-
+        
         const relatedSection = document.querySelector('salla-products-slider[source="related"], salla-products-slider[source="selected"]');
         recentSlider.setAttribute('display-style', relatedSection?.getAttribute('display-style') || 'normal');
-
+        
         container.appendChild(recentSlider);
-
+        
         this.insertRecentlyViewedSection(container, relatedSection);
 
         window.salla?.event?.dispatch('twilight::mutation');
-        this.setupStockFilter(recentSlider);
+        this.setupStockFilter(recentSlider, filteredRecent);
     }
-
+    
     insertRecentlyViewedSection(container, relatedSection) {
         const productDetails = document.querySelector('.product-details, .product-entry, #product-entry');
         if (productDetails && productDetails.parentNode) {
             productDetails.parentNode.insertBefore(container, productDetails.nextSibling);
             return true;
         }
-
+        
         if (relatedSection) {
             const relatedContainer = relatedSection.closest('.s-products-slider-container');
             if (relatedContainer && relatedContainer.parentNode) {
                 relatedContainer.parentNode.insertBefore(container, relatedContainer.nextSibling);
                 return true;
             }
-
+            
             if (relatedSection.parentNode) {
                 relatedSection.parentNode.insertBefore(container, relatedSection.nextSibling);
                 return true;
             }
         }
-
+        
         const mainContent = document.querySelector('main, .s-product-page-content, #content, .s-product-page');
         if (mainContent) {
             mainContent.appendChild(container);
             return true;
         }
-
+        
         document.body.appendChild(container);
         return true;
     }
-
+    
     addToRecentlyViewed(productId) {
         if (!productId) return;
-
+        
         try {
             const numericId = parseInt(productId, 10);
             if (isNaN(numericId)) return;
-
+            
             let recentlyViewed = this.getRecentlyViewed();
             recentlyViewed = recentlyViewed
                 .map(id => parseInt(id, 10))
                 .filter(id => !isNaN(id));
-
+                
             recentlyViewed = recentlyViewed.filter(id => id !== numericId);
             recentlyViewed.unshift(numericId);
-
+            
             if (recentlyViewed.length > this.maxRecentProducts) {
                 recentlyViewed = recentlyViewed.slice(0, this.maxRecentProducts);
             }
-
+            
             sessionStorage.setItem(this.recentlyViewedKey, JSON.stringify(recentlyViewed));
         } catch (error) {
         }
@@ -160,11 +160,11 @@ class ProductRecommendations {
             return [];
         }
     }
-
+    
     isProductPage() {
         return !!document.querySelector('.product-form input[name="id"], [id^="product-"], .sidebar .details-slider');
     }
-
+    
     getProductId() {
         const formInput = document.querySelector('.product-form input[name="id"]');
         if (formInput?.value) {
@@ -194,16 +194,16 @@ class ProductRecommendations {
             const numericId = parseInt(fromStandalone, 10);
             if (!isNaN(numericId)) return numericId;
         }
-
+        
         const urlMatch = window.location.pathname.match(/\/p(\d+)/);
         if (urlMatch?.[1]) {
             const numericId = parseInt(urlMatch[1], 10);
             if (!isNaN(numericId)) return numericId;
         }
-
+        
         return null;
     }
-
+    
     async replaceRelatedProducts(element) {
         try {
             const requestedProductId = this.productId;
@@ -215,265 +215,209 @@ class ProductRecommendations {
                 return;
             }
 
-            if (!recommendedIds?.length) {
-                this.teardownCustomSlider();
-                return;
-            }
+            if (!recommendedIds?.length) return;
 
             const numericIds = recommendedIds
                 .map(id => parseInt(id, 10))
                 .filter(id => id && !isNaN(id));
 
-            if (!numericIds.length) {
-                this.teardownCustomSlider();
+            if (!numericIds.length) return;
+            
+            const newSlider = document.createElement('salla-products-slider');
+            
+            Array.from(element.attributes).forEach(attr => {
+                if (attr.name !== 'source-value') {
+                    newSlider.setAttribute(attr.name, attr.value);
+                }
+            });
+            
+            newSlider.setAttribute('source', 'selected');
+            newSlider.setAttribute('source-value', JSON.stringify(numericIds));
+            newSlider.setAttribute('class', 'product-recommendations-slider');
+            
+            element.parentNode.replaceChild(newSlider, element);
+            
+            if (!document.getElementById('product-recommendations-styles')) {
+                const styleEl = document.createElement('style');
+                styleEl.id = 'product-recommendations-styles';
+                styleEl.textContent = `
+                    .product-recommendations-slider .swiper-slide,
+                    salla-products-slider[source="selected"] .swiper-slide {
+                        width: 47% !important;
+                    }
+                    @media (min-width: 769px) {
+                        .product-recommendations-slider .swiper-slide,
+                        salla-products-slider[source="selected"] .swiper-slide {
+                            width: 31% !important;
+                        }
+                    }
+                    @media (min-width: 1025px) {
+                        .product-recommendations-slider .swiper-slide,
+                        salla-products-slider[source="selected"] .swiper-slide {
+                            width: 24% !important;
+                        }
+                    }
+                `;
+                document.head.appendChild(styleEl);
+            }
+            
+            window.salla?.event?.dispatch('twilight::mutation');
+            this.setupStockFilter(newSlider, numericIds);
+        } catch {
+        }
+    }
+    
+    setupStockFilter(slider, productIds = null) {
+        const handler = (event) => {
+            if (!slider.contains(event.target)) return;
+
+            // Unregister immediately to prevent multiple firings
+            window.salla?.event?.off('salla-products-slider::products.fetched', handler);
+
+            setTimeout(() => {
+                const productCards = slider.querySelectorAll('.s-product-card-entry');
+                if (!productCards.length) return;
+
+                let inStockCount = 0;
+                const maxProducts = 15;
+
+                productCards.forEach(card => {
+                    const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
+
+                    if (isOutOfStock || inStockCount >= maxProducts) {
+                        card.style.display = 'none';
+                    } else {
+                        inStockCount++;
+                    }
+                });
+
+                if (productIds?.length) {
+                    this.attachOrdering(slider, productIds);
+                }
+            }, 200);
+        };
+
+        window.salla?.event?.on('salla-products-slider::products.fetched', handler);
+    }
+
+    reset() {
+        this.initialized = false;
+        this.productId = null;
+        this.removeExistingRecentlyViewed();
+
+        this.orderObservers.forEach(({ observer }) => observer.disconnect());
+        this.orderObservers.clear();
+
+        this.orderTimers.forEach(timer => clearTimeout(timer));
+        this.orderTimers.clear();
+    }
+
+    attachOrdering(slider, ids) {
+        if (!slider || !ids?.length) return;
+
+        slider.dataset.recommendationOrder = ids.join(',');
+        this.scheduleReorder(slider, ids, true);
+        this.setupOrderObserver(slider, ids);
+    }
+
+    scheduleReorder(slider, ids, immediate = false) {
+        if (!slider || !ids?.length) return;
+
+        const run = () => {
+            if (!slider.isConnected) {
+                this.teardownOrdering(slider);
+                return false;
+            }
+            const wrapper = slider.querySelector('.swiper-wrapper');
+            if (!wrapper) return false;
+            return this.applyOrderOnce(slider, wrapper, ids);
+        };
+
+        if (immediate) {
+            const applied = run();
+            if (applied) return;
+            this.scheduleReorder(slider, ids, false);
+            return;
+        }
+
+        const existing = this.orderTimers.get(slider);
+        if (existing) {
+            clearTimeout(existing);
+        }
+
+        const timer = setTimeout(() => {
+            this.orderTimers.delete(slider);
+            run();
+        }, 80);
+
+        this.orderTimers.set(slider, timer);
+    }
+
+    setupOrderObserver(slider, ids) {
+        const wrapper = slider.querySelector('.swiper-wrapper');
+        if (!wrapper) return;
+
+        const existing = this.orderObservers.get(slider);
+        if (existing) {
+            existing.ids = ids;
+            return;
+        }
+
+        const observer = new MutationObserver((mutations) => {
+            if (!mutations.some(m => m.type === 'childList')) return;
+            if (this.reorderingWrappers.has(wrapper)) return;
+            if (!slider.isConnected) {
+                this.teardownOrdering(slider);
                 return;
             }
 
-            this.renderCustomSlider(element, numericIds);
-        } catch {
-            this.teardownCustomSlider();
-        }
-    }
+            const state = this.orderObservers.get(slider);
+            const targetIds = state?.ids || ids;
+            if (!targetIds?.length) return;
 
-    ensureCustomSliderStyles() {
-        if (document.getElementById('algolia-custom-slider-styles')) return;
-
-        const styleEl = document.createElement('style');
-        styleEl.id = 'algolia-custom-slider-styles';
-        styleEl.textContent = `
-            .algolia-recommendations-container {
-                position: relative;
-            }
-            .algolia-recommendations-container .algolia-slider-head {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                margin-bottom: 1rem;
-            }
-            .algolia-recommendations-container .algolia-slider-head h2 {
-                font-size: 1.25rem;
-                font-weight: 700;
-                margin: 0;
-            }
-            .algolia-recommendations-container .algolia-nav-btn {
-                background: rgba(0, 0, 0, 0.05);
-                border: none;
-                width: 36px;
-                height: 36px;
-                border-radius: 9999px;
-                display: inline-flex;
-                align-items: center;
-                justify-content: center;
-                color: inherit;
-                cursor: pointer;
-                transition: background 0.2s ease;
-            }
-            .algolia-recommendations-container .algolia-nav-btn[disabled] {
-                opacity: 0.4;
-                cursor: default;
-            }
-            .algolia-recommendations-container .algolia-nav-btn:not([disabled]):hover {
-                background: rgba(0, 0, 0, 0.12);
-            }
-            .algolia-recommendations-container .algolia-swiper {
-                position: relative;
-                padding-bottom: 0.5rem;
-            }
-            .algolia-recommendations-container .algolia-swiper.swiper {
-                overflow: hidden;
-            }
-            .algolia-recommendations-container .algolia-swiper--fallback {
-                display: grid;
-                grid-auto-flow: column;
-                grid-auto-columns: minmax(72%, 1fr);
-                gap: 0.75rem;
-                overflow-x: auto;
-                padding-bottom: 0.5rem;
-                scroll-snap-type: x mandatory;
-            }
-            .algolia-recommendations-container .algolia-swiper--fallback .algolia-slide {
-                scroll-snap-align: start;
-            }
-            .algolia-recommendations-container .swiper-slide.algolia-slide {
-                height: auto;
-            }
-            @media (min-width: 640px) {
-                .algolia-recommendations-container .algolia-swiper--fallback {
-                    grid-auto-columns: minmax(45%, 1fr);
-                }
-            }
-            @media (min-width: 1024px) {
-                .algolia-recommendations-container .algolia-swiper--fallback {
-                    grid-auto-columns: minmax(25%, 1fr);
-                }
-            }
-        `;
-
-        document.head.appendChild(styleEl);
-    }
-
-    renderCustomSlider(originalSlider, productIds, attempt = 0) {
-        if (!productIds?.length) {
-            this.teardownCustomSlider();
-            return;
-        }
-
-        const baseSlider = this.hiddenOriginalSlider || originalSlider;
-        const parent = baseSlider?.parentNode;
-        if (!baseSlider || !parent) return;
-
-        const cardMap = this.collectCardsFromSlider(baseSlider);
-
-        if ((cardMap.size === 0 || cardMap.size < productIds.length) && attempt < 10) {
-            setTimeout(() => this.renderCustomSlider(originalSlider, productIds, attempt + 1), 160);
-            return;
-        }
-
-        this.teardownCustomSlider();
-
-        this.ensureCustomSliderStyles();
-
-        this.hiddenOriginalSlider = baseSlider;
-        baseSlider.style.display = 'none';
-        baseSlider.setAttribute('aria-hidden', 'true');
-        baseSlider.setAttribute('data-algolia-hidden', 'true');
-
-        const container = document.createElement('div');
-        container.className = 'algolia-recommendations-container s-products-slider-wrapper';
-        container.setAttribute('data-algolia-slider', 'recommendations');
-
-        const sliderId = `algolia-rec-${Date.now()}`;
-        container.setAttribute('data-slider-id', sliderId);
-
-        const titleText = baseSlider.getAttribute('block-title') || baseSlider.getAttribute('data-title') || baseSlider.getAttribute('title') || 'منتجات قد تعجبك';
-        const displayUrl = baseSlider.getAttribute('display-all-url');
-
-        const header = document.createElement('div');
-        header.className = 's-slider-block__title algolia-slider-head';
-
-        const headerRight = document.createElement('div');
-        headerRight.className = 's-slider-block__title-right';
-
-        const heading = document.createElement('h2');
-        heading.textContent = titleText;
-        headerRight.appendChild(heading);
-
-        if (displayUrl) {
-            const viewAll = document.createElement('a');
-            viewAll.href = displayUrl;
-            viewAll.className = 'text-sm text-primary-600 hover:underline';
-            viewAll.textContent = window.salla?.lang?.get('common.btn_show_all') || 'عرض الكل';
-            headerRight.appendChild(viewAll);
-        }
-
-        const headerLeft = document.createElement('div');
-        headerLeft.className = 's-slider-block__title-left';
-
-        const navWrapper = document.createElement('div');
-        navWrapper.className = 's-slider-block__title-nav algolia-slider-nav';
-
-        const prevBtn = document.createElement('button');
-        prevBtn.type = 'button';
-        prevBtn.className = 'algolia-nav-btn algolia-nav-prev s-slider-prev s-slider-nav-arrow';
-        prevBtn.setAttribute('aria-label', 'Previous');
-        prevBtn.innerHTML = '<span class="s-slider-button-icon"><svg width="24" height="24" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M20.562 9.521l-6.125 6.125 6.125 6.125-1.875 1.875-8-8 8-8z"/></svg></span>';
-        navWrapper.appendChild(prevBtn);
-
-        const nextBtn = document.createElement('button');
-        nextBtn.type = 'button';
-        nextBtn.className = 'algolia-nav-btn algolia-nav-next s-slider-next s-slider-nav-arrow';
-        nextBtn.setAttribute('aria-label', 'Next');
-        nextBtn.innerHTML = '<span class="s-slider-button-icon"><svg width="24" height="24" viewBox="0 0 32 32" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M11.438 9.896l1.875-1.875 8 8-8 8-1.875-1.875 6.125-6.125z"/></svg></span>';
-        navWrapper.appendChild(nextBtn);
-
-        headerLeft.appendChild(navWrapper);
-        header.appendChild(headerRight);
-        header.appendChild(headerLeft);
-        container.appendChild(header);
-
-        const direction = baseSlider.getAttribute('dir') || document.dir || 'rtl';
-
-        const swiperShell = document.createElement('div');
-        swiperShell.className = 'algolia-swiper swiper s-products-slider-slider s-slider-wrapper carousel-slider s-slider-horizontal';
-        swiperShell.setAttribute('dir', direction);
-
-        const wrapper = document.createElement('div');
-        wrapper.className = 'swiper-wrapper';
-        wrapper.id = `${sliderId}-wrapper`;
-        swiperShell.appendChild(wrapper);
-
-        productIds.forEach(id => {
-            const slide = document.createElement('div');
-            slide.className = 's-products-slider-card swiper-slide algolia-slide';
-            slide.dataset.productId = String(id);
-
-            const card = cardMap.get(String(id));
-
-            if (!card) return;
-
-            const cardClone = card.cloneNode(true);
-            cardClone.id = `algolia-card-${id}`;
-            cardClone.setAttribute('data-algolia-cloned', 'true');
-            cardClone.setAttribute('data-id', String(id));
-            cardClone.setAttribute('product-id', String(id));
-            if (cardClone.dataset) {
-                cardClone.dataset.id = String(id);
-            }
-            cardClone.classList.add('s-product-card-entry');
-            if (!cardClone.classList.contains('s-product-card-vertical')) {
-                cardClone.classList.add('s-product-card-vertical');
-            }
-            cardClone.classList.remove('swiper-slide');
-            cardClone.classList.remove('slider__item');
-            slide.appendChild(cardClone);
-            wrapper.appendChild(slide);
+            this.scheduleReorder(slider, targetIds);
         });
 
-        if (!wrapper.children.length) {
-            this.teardownCustomSlider();
-            return;
-        }
+        observer.observe(wrapper, { childList: true });
 
-        container.appendChild(swiperShell);
-
-        parent.insertBefore(container, baseSlider);
-
-        this.customSliderContainer = container;
-
-        navWrapper.setAttribute('dir', direction);
-
-        this.customSwiper = this.initCustomSwiper(swiperShell, prevBtn, nextBtn, productIds.length);
-
-        if (productIds.length <= 1) {
-            prevBtn.style.display = 'none';
-            nextBtn.style.display = 'none';
-        }
-
-        window.salla?.event?.dispatch('twilight::mutation');
-
-        setTimeout(() => this.applyCustomStockFilter(container), 400);
+        this.orderObservers.set(slider, { observer, ids, wrapper });
     }
 
-    collectCardsFromSlider(baseSlider) {
-        const map = new Map();
-        if (!baseSlider) return map;
+    teardownOrdering(slider) {
+        const state = this.orderObservers.get(slider);
+        if (state) {
+            state.observer.disconnect();
+            this.orderObservers.delete(slider);
+        }
 
-        const cards = Array.from(baseSlider.querySelectorAll('custom-salla-product-card'));
+        const timer = this.orderTimers.get(slider);
+        if (timer) {
+            clearTimeout(timer);
+            this.orderTimers.delete(slider);
+        }
+    }
 
-        cards.forEach(card => {
-            let productId = card.dataset.id || card.getAttribute('data-id');
+    applyOrderOnce(slider, wrapper, ids) {
+        if (!wrapper || !ids?.length) return false;
 
-            if (!productId && card.id && !isNaN(card.id)) {
-                productId = card.id;
+        const slides = Array.from(wrapper.querySelectorAll('.s-products-slider-card'));
+        if (!slides.length) return false;
+
+        this.reorderingWrappers.add(wrapper);
+
+        const slideMap = new Map();
+
+        slides.forEach(slide => {
+            const card = slide.querySelector('.s-product-card-entry, custom-salla-product-card');
+            let productId = card?.dataset?.id || card?.getAttribute?.('data-id') || card?.id;
+
+            if (!productId) {
+                const numericId = card?.getAttribute?.('product-id');
+                if (numericId) productId = numericId;
             }
 
             if (!productId) {
-                const parsed = card.getAttribute('product-id');
-                if (parsed) productId = parsed;
-            }
-
-            if (!productId) {
-                const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a');
+                const link = slide.querySelector('.s-product-card-image a, .s-product-card-content-title a');
                 if (link?.href) {
                     const match = link.href.match(/\/p(\d+)(?:$|\?|\/)/) || link.href.match(/\/product\/[^/]+\/(\d+)/);
                     if (match?.[1]) productId = match[1];
@@ -481,138 +425,32 @@ class ProductRecommendations {
             }
 
             if (productId) {
-                map.set(String(productId), card);
+                slideMap.set(String(productId), slide);
             }
         });
 
-        return map;
-    }
+        let reordered = false;
 
-    initCustomSwiper(swiperEl, prevBtn, nextBtn, totalSlides) {
-        if (!window.Swiper) {
-            swiperEl.classList.add('algolia-swiper--fallback');
-            swiperEl.classList.remove('swiper');
-            swiperEl.classList.remove('s-slider-horizontal');
-            prevBtn.style.display = 'none';
-            nextBtn.style.display = 'none';
-            return null;
-        }
-
-        return new window.Swiper(swiperEl, {
-            slidesPerView: 1.2,
-            spaceBetween: 14,
-            watchOverflow: true,
-            observeParents: true,
-            observer: true,
-            direction: swiperEl.getAttribute('dir') === 'ltr' ? 'ltr' : 'rtl',
-            navigation: {
-                nextEl: nextBtn,
-                prevEl: prevBtn,
-            },
-            keyboard: {
-                enabled: true,
-            },
-            breakpoints: {
-                480: { slidesPerView: 1.6, spaceBetween: 16 },
-                768: { slidesPerView: 2.4, spaceBetween: 18 },
-                1024: { slidesPerView: Math.min(3.2, totalSlides), spaceBetween: 20 },
-                1280: { slidesPerView: Math.min(4, totalSlides), spaceBetween: 20 },
-            },
-        });
-    }
-
-    applyCustomStockFilter(container, attempt = 0) {
-        if (!container?.isConnected) return;
-
-        const cards = Array.from(container.querySelectorAll('.s-product-card-entry'));
-
-        const cardsReady = cards.length > 0 && cards.every(card => card.querySelector('.s-product-card-content'));
-
-        if (!cardsReady) {
-            if (attempt >= 12) return;
-            setTimeout(() => this.applyCustomStockFilter(container, attempt + 1), 300);
-            return;
-        }
-
-        let inStockCount = 0;
-        const maxProducts = 15;
-
-        cards.forEach(card => {
-            const slide = card.closest('.swiper-slide') || card.parentElement;
-            if (!slide) return;
-
-            const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-
-            if (isOutOfStock || inStockCount >= maxProducts) {
-                slide.style.display = 'none';
-            } else {
-                slide.style.display = '';
-                inStockCount++;
+        ids.forEach(id => {
+            const slide = slideMap.get(String(id));
+            if (slide && slide.parentNode === wrapper) {
+                wrapper.appendChild(slide);
+                reordered = true;
             }
         });
 
-        if (this.customSwiper) {
-            this.customSwiper.updateSlides();
-            this.customSwiper.updateProgress();
-        }
-    }
+        if (reordered) {
+            const sallaSlider = slider.querySelector('salla-slider');
+            const swiper = sallaSlider?.swiper;
 
-    teardownCustomSlider() {
-        if (this.customSwiper) {
-            try {
-                this.customSwiper.destroy(true, true);
-            } catch {
-            }
-        }
-        this.customSwiper = null;
-
-        if (this.customSliderContainer?.parentNode) {
-            this.customSliderContainer.parentNode.removeChild(this.customSliderContainer);
-        }
-        this.customSliderContainer = null;
-
-        if (this.hiddenOriginalSlider) {
-            this.hiddenOriginalSlider.style.display = '';
-            this.hiddenOriginalSlider.removeAttribute('aria-hidden');
-            this.hiddenOriginalSlider.removeAttribute('data-algolia-hidden');
+            swiper?.updateSlides?.();
+            swiper?.updateProgress?.();
+            swiper?.slideTo?.(0, 0, false);
         }
 
-        this.hiddenOriginalSlider = null;
-    }
+        requestAnimationFrame(() => this.reorderingWrappers.delete(wrapper));
 
-    setupStockFilter(slider) {
-        window.salla?.event?.on('salla-products-slider::products.fetched', event => {
-            if (!slider.contains(event.target)) return;
-
-            setTimeout(() => {
-                const cards = slider.querySelectorAll('.s-product-card-entry');
-                if (!cards.length) return;
-
-                let inStockCount = 0;
-                const maxProducts = 15;
-
-                cards.forEach(card => {
-                    const slide = card.closest('.swiper-slide') || card.parentElement;
-                    if (!slide) return;
-
-                    const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-
-                    if (isOutOfStock || inStockCount >= maxProducts) {
-                        slide.style.display = 'none';
-                    } else {
-                        slide.style.display = '';
-                        inStockCount++;
-                    }
-                });
-            }, 200);
-        });
-    }
-
-    reset() {
-        this.initialized = false;
-        this.productId = null;
-        this.teardownCustomSlider();
-        this.removeExistingRecentlyViewed();
+        return true;
     }
 
     waitForElement(selector, callback) {
@@ -621,7 +459,7 @@ class ProductRecommendations {
             callback(element);
             return;
         }
-
+        
         const observer = new MutationObserver(() => {
             const element = document.querySelector(selector);
             if (element) {
@@ -629,7 +467,7 @@ class ProductRecommendations {
                 callback(element);
             }
         });
-
+        
         observer.observe(document.body, {
             childList: true,
             subtree: true
@@ -638,4 +476,4 @@ class ProductRecommendations {
 }
 
 export const productRecommendations = new ProductRecommendations();
-export default productRecommendations;
+export default productRecommendations; 
