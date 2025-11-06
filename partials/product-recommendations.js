@@ -159,14 +159,36 @@ class ProductRecommendations {
     }
     
     isProductPage() {
-        return !!document.querySelector('[id^="product-"], .sidebar .details-slider');
+        return !!document.querySelector('.product-form input[name="id"], [id^="product-"], .sidebar .details-slider');
     }
     
     getProductId() {
-        const productContainer = document.querySelector('[id^="product-"]');
-        if (productContainer) {
-            const id = productContainer.id.replace('product-', '');
-            const numericId = parseInt(id, 10);
+        const formInput = document.querySelector('.product-form input[name="id"]');
+        if (formInput?.value) {
+            const numericId = parseInt(formInput.value, 10);
+            if (!isNaN(numericId)) return numericId;
+        }
+
+        const sallaProductId = window.salla?.product?.id;
+        if (sallaProductId) {
+            const numericId = parseInt(sallaProductId, 10);
+            if (!isNaN(numericId)) return numericId;
+        }
+
+        const pageContainer = document.querySelector('.product-entry, #product-entry, .product-details');
+        if (pageContainer) {
+            const scopedContainer = pageContainer.matches('[id^="product-"]') ? pageContainer : pageContainer.querySelector('[id^="product-"]');
+            if (scopedContainer && !scopedContainer.closest('salla-products-slider')) {
+                const fromContainer = scopedContainer.id.replace('product-', '');
+                const numericId = parseInt(fromContainer, 10);
+                if (!isNaN(numericId)) return numericId;
+            }
+        }
+
+        const standaloneContainer = document.querySelector('[id^="product-"]');
+        if (standaloneContainer && !standaloneContainer.closest('salla-products-slider')) {
+            const fromStandalone = standaloneContainer.id.replace('product-', '');
+            const numericId = parseInt(fromStandalone, 10);
             if (!isNaN(numericId)) return numericId;
         }
         
