@@ -269,21 +269,105 @@ class ProductRecommendations {
             if (!slider.contains(event.target)) return;
 
             setTimeout(() => {
-                const productCards = slider.querySelectorAll('.s-product-card-entry');
-                if (!productCards.length) return;
+                // STEP 1: Get the correct order from source-value attribute
+                const sourceValue = slider.getAttribute('source-value');
+                if (!sourceValue) {
+                    console.warn('[Bundle Recommendations] No source-value found on slider');
+                    return;
+                }
 
+                let orderedIds = [];
+                try {
+                    orderedIds = JSON.parse(sourceValue);
+                } catch (e) {
+                    console.error('[Bundle Recommendations] Failed to parse source-value:', e);
+                    return;
+                }
+
+                if (!orderedIds || !orderedIds.length) return;
+
+                // STEP 2: Find the swiper wrapper container
+                const swiperWrapper = slider.querySelector('.swiper-wrapper');
+                if (!swiperWrapper) {
+                    console.warn('[Bundle Recommendations] No swiper-wrapper found');
+                    return;
+                }
+
+                // STEP 3: Get all slides and create ID->slide mapping
+                const slides = Array.from(swiperWrapper.querySelectorAll('.swiper-slide'));
+                const slideMap = new Map();
+
+                slides.forEach(slide => {
+                    const card = slide.querySelector('.s-product-card-entry');
+                    if (!card) return;
+
+                    // Extract product ID from card (multiple fallback methods)
+                    let productId = null;
+
+                    // Try data-id attribute
+                    if (card.dataset.id) {
+                        productId = card.dataset.id;
+                    }
+                    // Try id attribute
+                    else if (card.id && !isNaN(card.id)) {
+                        productId = card.id;
+                    }
+                    // Try extracting from link href
+                    else {
+                        const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a');
+                        if (link?.href) {
+                            const match = link.href.match(/\/p(\d+)/) || link.href.match(/\/product\/[^\/]+\/(\d+)/);
+                            if (match) productId = match[1];
+                        }
+                    }
+
+                    if (productId) {
+                        slideMap.set(String(productId), slide);
+                    }
+                });
+
+                console.log(`[Bundle Recommendations] Found ${slideMap.size} slides with IDs`);
+
+                // STEP 4: Reorder slides to match Algolia order
+                let reorderedCount = 0;
+                orderedIds.forEach((id) => {
+                    const slide = slideMap.get(String(id));
+                    if (slide && swiperWrapper.contains(slide)) {
+                        swiperWrapper.appendChild(slide); // Move to end in correct order
+                        reorderedCount++;
+                    }
+                });
+
+                console.log(`[Bundle Recommendations] Reordered ${reorderedCount} slides to match Algolia ranking`);
+
+                // STEP 5: Filter out-of-stock products AFTER reordering
+                const productCards = swiperWrapper.querySelectorAll('.s-product-card-entry');
                 let inStockCount = 0;
                 const maxProducts = 15;
 
                 productCards.forEach(card => {
+                    const slide = card.closest('.swiper-slide');
                     const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
 
                     if (isOutOfStock || inStockCount >= maxProducts) {
-                        card.style.display = 'none';
+                        if (slide) slide.style.display = 'none';
                     } else {
+                        if (slide) slide.style.display = '';
                         inStockCount++;
                     }
                 });
+
+                // STEP 6: Update Swiper instance to recognize new order
+                const sallaSlider = slider.querySelector('salla-slider');
+                const swiper = sallaSlider?.swiper;
+
+                if (swiper) {
+                    swiper.update();
+                    swiper.updateSlides();
+                    swiper.updateProgress();
+                    swiper.updateSlidesClasses();
+                    console.log('[Bundle Recommendations] Updated Swiper instance');
+                }
             }, 200);
         });
     }
