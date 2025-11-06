@@ -312,7 +312,7 @@ class ProductRecommendations {
         document.head.appendChild(styleEl);
     }
 
-    renderCustomSlider(originalSlider, productIds) {
+    renderCustomSlider(originalSlider, productIds, attempt = 0) {
         if (!productIds?.length) {
             this.teardownCustomSlider();
             return;
@@ -321,6 +321,13 @@ class ProductRecommendations {
         const baseSlider = this.hiddenOriginalSlider || originalSlider;
         const parent = baseSlider?.parentNode;
         if (!baseSlider || !parent) return;
+
+        const cardMap = this.collectCardsFromSlider(baseSlider);
+
+        if ((cardMap.size === 0 || cardMap.size < productIds.length) && attempt < 10) {
+            setTimeout(() => this.renderCustomSlider(originalSlider, productIds, attempt + 1), 160);
+            return;
+        }
 
         this.teardownCustomSlider();
 
@@ -400,17 +407,26 @@ class ProductRecommendations {
             slide.className = 'swiper-slide algolia-slide';
             slide.dataset.productId = String(id);
 
-            const card = document.createElement('custom-salla-product-card');
-            card.classList.add('s-product-card-entry', 's-product-card-vertical');
-            card.setAttribute('source', 'selected');
-            card.setAttribute('loading', 'lazy');
-            card.setAttribute('data-id', id);
-            card.setAttribute('product-id', id);
-            card.id = `algolia-card-${id}`;
+            const card = cardMap.get(String(id));
 
-            slide.appendChild(card);
+            if (!card) return;
+
+            const cardClone = card.cloneNode(true);
+            cardClone.id = `algolia-card-${id}`;
+            cardClone.setAttribute('data-algolia-cloned', 'true');
+            cardClone.setAttribute('data-id', String(id));
+            cardClone.setAttribute('product-id', String(id));
+            if (cardClone.dataset) {
+                cardClone.dataset.id = String(id);
+            }
+            slide.appendChild(cardClone);
             wrapper.appendChild(slide);
         });
+
+        if (!wrapper.children.length) {
+            this.teardownCustomSlider();
+            return;
+        }
 
         container.appendChild(swiperShell);
 
@@ -430,6 +446,40 @@ class ProductRecommendations {
         window.salla?.event?.dispatch('twilight::mutation');
 
         setTimeout(() => this.applyCustomStockFilter(container), 400);
+    }
+
+    collectCardsFromSlider(baseSlider) {
+        const map = new Map();
+        if (!baseSlider) return map;
+
+        const cards = Array.from(baseSlider.querySelectorAll('custom-salla-product-card'));
+
+        cards.forEach(card => {
+            let productId = card.dataset.id || card.getAttribute('data-id');
+
+            if (!productId && card.id && !isNaN(card.id)) {
+                productId = card.id;
+            }
+
+            if (!productId) {
+                const parsed = card.getAttribute('product-id');
+                if (parsed) productId = parsed;
+            }
+
+            if (!productId) {
+                const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a');
+                if (link?.href) {
+                    const match = link.href.match(/\/p(\d+)(?:$|\?|\/)/) || link.href.match(/\/product\/[^/]+\/(\d+)/);
+                    if (match?.[1]) productId = match[1];
+                }
+            }
+
+            if (productId) {
+                map.set(String(productId), card);
+            }
+        });
+
+        return map;
     }
 
     initCustomSwiper(swiperEl, prevBtn, nextBtn, totalSlides) {
@@ -529,140 +579,25 @@ class ProductRecommendations {
             if (!slider.contains(event.target)) return;
 
             setTimeout(() => {
-                // STEP 1: Get the correct order from source-value attribute
-                const sourceValue = slider.getAttribute('source-value');
-                if (!sourceValue) {
-                    console.warn('[Bundle Recommendations] No source-value found on slider');
-                    return;
-                }
+                const cards = slider.querySelectorAll('.s-product-card-entry');
+                if (!cards.length) return;
 
-                let orderedIds = [];
-                try {
-                    orderedIds = JSON.parse(sourceValue);
-                } catch (e) {
-                    console.error('[Bundle Recommendations] Failed to parse source-value:', e);
-                    return;
-                }
+                let inStockCount = 0;
+                const maxProducts = 15;
 
-                if (!orderedIds || !orderedIds.length) return;
+                cards.forEach(card => {
+                    const slide = card.closest('.swiper-slide') || card.parentElement;
+                    if (!slide) return;
 
-                // STEP 2: Find the swiper wrapper container
-                const swiperWrapper = slider.querySelector('.swiper-wrapper');
-                if (!swiperWrapper) {
-                    console.warn('[Bundle Recommendations] No swiper-wrapper found');
-                    return;
-                }
+                    const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
 
-                // STEP 3: Get all slides and create ID->slide mapping
-                const slides = Array.from(swiperWrapper.querySelectorAll('.swiper-slide'));
-                const slideMap = new Map();
-
-                slides.forEach(slide => {
-                    const card = slide.querySelector('.s-product-card-entry');
-                    if (!card) return;
-
-                    // Extract product ID from card (multiple fallback methods)
-                    let productId = null;
-
-                    // Try data-id attribute
-                    if (card.dataset.id) {
-                        productId = card.dataset.id;
-                    }
-                    // Try id attribute
-                    else if (card.id && !isNaN(card.id)) {
-                        productId = card.id;
-                    }
-                    // Try extracting from link href
-                    else {
-                        const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a');
-                        if (link?.href) {
-                            const match = link.href.match(/\/p(\d+)/) || link.href.match(/\/product\/[^\/]+\/(\d+)/);
-                            if (match) productId = match[1];
-                        }
-                    }
-
-                    if (productId) {
-                        slideMap.set(String(productId), slide);
+                    if (isOutOfStock || inStockCount >= maxProducts) {
+                        slide.style.display = 'none';
+                    } else {
+                        slide.style.display = '';
+                        inStockCount++;
                     }
                 });
-
-                console.log(`[Bundle Recommendations] Found ${slideMap.size} slides with IDs`);
-
-                // STEP 4: Reorder slides to match Algolia order
-                let reorderedCount = 0;
-                orderedIds.forEach((id) => {
-                    const slide = slideMap.get(String(id));
-                    if (slide && swiperWrapper.contains(slide)) {
-                        swiperWrapper.appendChild(slide); // Move to end in correct order
-                        reorderedCount++;
-                    }
-                });
-
-                console.log(`[Bundle Recommendations] Reordered ${reorderedCount} slides to match Algolia ranking`);
-
-                // STEP 5: DESTROY AND RECREATE Swiper to force recognition of new order
-                const sallaSlider = slider.querySelector('salla-slider');
-                const swiper = sallaSlider?.swiper;
-
-                if (swiper) {
-                    console.log('[Bundle Recommendations] Destroying Swiper instance to force rebuild...');
-
-                    // Save Swiper configuration before destroying
-                    const swiperParams = {
-                        ...swiper.params
-                    };
-
-                    // Destroy current Swiper instance completely
-                    swiper.destroy(true, true);
-
-                    // Small delay to ensure cleanup completes
-                    setTimeout(() => {
-                        // Trigger Salla to reinitialize the slider component
-                        window.salla?.event?.dispatch('twilight::mutation');
-
-                        console.log('[Bundle Recommendations] Triggered Salla to reinitialize slider');
-
-                        // Wait for reinit, then filter stock
-                        setTimeout(() => {
-                            const productCards = swiperWrapper.querySelectorAll('.s-product-card-entry');
-                            let inStockCount = 0;
-                            const maxProducts = 15;
-
-                            productCards.forEach(card => {
-                                const slide = card.closest('.swiper-slide');
-                                const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-
-                                if (isOutOfStock || inStockCount >= maxProducts) {
-                                    if (slide) slide.style.display = 'none';
-                                } else {
-                                    if (slide) slide.style.display = '';
-                                    inStockCount++;
-                                }
-                            });
-
-                            console.log('[Bundle Recommendations] Applied stock filter after Swiper rebuild');
-                        }, 300);
-                    }, 100);
-                } else {
-                    // Fallback if no Swiper instance found
-                    console.warn('[Bundle Recommendations] No Swiper instance found, applying stock filter only');
-
-                    const productCards = swiperWrapper.querySelectorAll('.s-product-card-entry');
-                    let inStockCount = 0;
-                    const maxProducts = 15;
-
-                    productCards.forEach(card => {
-                        const slide = card.closest('.swiper-slide');
-                        const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-
-                        if (isOutOfStock || inStockCount >= maxProducts) {
-                            if (slide) slide.style.display = 'none';
-                        } else {
-                            if (slide) slide.style.display = '';
-                            inStockCount++;
-                        }
-                    });
-                }
             }, 200);
         });
     }
