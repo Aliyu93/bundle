@@ -10,6 +10,7 @@
 // Static imports – esbuild bundles these automatically
 import { redisService } from './services/redis-service.js';
 import CartAddonsSlider from './components/CartAddonsSlider.js';
+import './components/AlgoliaRecommendationsSlider.js'; // Custom slider for product recommendations
 import './partials/product-ranking.js';       // Registers <product-ranking> custom element
 import './partials/category-products.js';     // Registers <mahaba-category-products> custom element
 import productRecommendations from './partials/product-recommendations.js';

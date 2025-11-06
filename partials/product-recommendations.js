@@ -13,9 +13,6 @@ class ProductRecommendations {
         this.recentlyViewedKey = 'recently_viewed_products';
         this.maxRecentProducts = 15;
         this.recentlyViewedClass = 'algolia-recently-viewed';
-        this.orderObservers = new Map();
-        this.orderTimers = new Map();
-        this.reorderingWrappers = new WeakSet();
     }
     
     initialize() {
@@ -55,43 +52,34 @@ class ProductRecommendations {
         }
     }
     
-    loadRecentlyViewed() {
+    async loadRecentlyViewed() {
         const recentlyViewed = this.getRecentlyViewed();
-        
+
         if (!recentlyViewed.length) return;
-        
+
         const filteredRecent = recentlyViewed
             .map(id => parseInt(id, 10))
             .filter(id => id && !isNaN(id) && id !== parseInt(this.productId, 10));
-            
+
         if (!filteredRecent.length) return;
 
         this.removeExistingRecentlyViewed();
 
-        const container = document.createElement('div');
-        container.className = 'mt-8 s-products-slider-container';
-        container.classList.add(this.recentlyViewedClass);
-        
-        const title = document.createElement('h2');
-        title.className = 'section-title mb-5 font-bold text-xl';
-        title.textContent = 'المنتجات المشاهدة مؤخراً';
-        container.appendChild(title);
-        
-        const recentSlider = document.createElement('salla-products-slider');
-        recentSlider.setAttribute('source', 'selected');
-        recentSlider.setAttribute('source-value', JSON.stringify(filteredRecent));
-        recentSlider.setAttribute('autoplay', 'false');
-        recentSlider.setAttribute('class', 'product-recommendations-slider');
-        
-        const relatedSection = document.querySelector('salla-products-slider[source="related"], salla-products-slider[source="selected"]');
-        recentSlider.setAttribute('display-style', relatedSection?.getAttribute('display-style') || 'normal');
-        
-        container.appendChild(recentSlider);
-        
-        this.insertRecentlyViewedSection(container, relatedSection);
+        // Use custom slider for recently viewed
+        const customSlider = document.createElement('algolia-recommendations-slider');
+        customSlider.className = 'algolia-recently-viewed mt-8';
 
-        window.salla?.event?.dispatch('twilight::mutation');
-        this.setupStockFilter(recentSlider, filteredRecent);
+        const relatedSection = document.querySelector('salla-products-slider[source="related"], salla-products-slider[source="selected"], algolia-recommendations-slider');
+        this.insertRecentlyViewedSection(customSlider, relatedSection);
+
+        // Initialize with recently viewed products
+        await customSlider.initialize(filteredRecent, {
+            title: 'المنتجات المشاهدة مؤخراً',
+            filterStock: true,
+            maxInStock: 15
+        });
+
+        console.log('[Bundle Recommendations] Recently viewed slider initialized with', filteredRecent.length, 'products');
     }
     
     insertRecentlyViewedSection(container, relatedSection) {
@@ -100,26 +88,26 @@ class ProductRecommendations {
             productDetails.parentNode.insertBefore(container, productDetails.nextSibling);
             return true;
         }
-        
+
         if (relatedSection) {
-            const relatedContainer = relatedSection.closest('.s-products-slider-container');
+            const relatedContainer = relatedSection.closest('.s-products-slider-container, .algolia-slider-wrapper');
             if (relatedContainer && relatedContainer.parentNode) {
                 relatedContainer.parentNode.insertBefore(container, relatedContainer.nextSibling);
                 return true;
             }
-            
+
             if (relatedSection.parentNode) {
                 relatedSection.parentNode.insertBefore(container, relatedSection.nextSibling);
                 return true;
             }
         }
-        
+
         const mainContent = document.querySelector('main, .s-product-page-content, #content, .s-product-page');
         if (mainContent) {
             mainContent.appendChild(container);
             return true;
         }
-        
+
         document.body.appendChild(container);
         return true;
     }
@@ -222,235 +210,38 @@ class ProductRecommendations {
                 .filter(id => id && !isNaN(id));
 
             if (!numericIds.length) return;
-            
-            const newSlider = document.createElement('salla-products-slider');
-            
-            Array.from(element.attributes).forEach(attr => {
-                if (attr.name !== 'source-value') {
-                    newSlider.setAttribute(attr.name, attr.value);
-                }
+
+            // Create our custom slider instead of salla-products-slider
+            const customSlider = document.createElement('algolia-recommendations-slider');
+            customSlider.className = 'product-recommendations-slider';
+
+            // Replace Salla's slider with our custom one
+            element.parentNode.replaceChild(customSlider, element);
+
+            // Initialize with Algolia products in exact order
+            await customSlider.initialize(numericIds, {
+                title: 'منتجات مشابهة',
+                filterStock: true,
+                maxInStock: 15
             });
-            
-            newSlider.setAttribute('source', 'selected');
-            newSlider.setAttribute('source-value', JSON.stringify(numericIds));
-            newSlider.setAttribute('class', 'product-recommendations-slider');
-            
-            element.parentNode.replaceChild(newSlider, element);
-            
-            if (!document.getElementById('product-recommendations-styles')) {
-                const styleEl = document.createElement('style');
-                styleEl.id = 'product-recommendations-styles';
-                styleEl.textContent = `
-                    .product-recommendations-slider .swiper-slide,
-                    salla-products-slider[source="selected"] .swiper-slide {
-                        width: 47% !important;
-                    }
-                    @media (min-width: 769px) {
-                        .product-recommendations-slider .swiper-slide,
-                        salla-products-slider[source="selected"] .swiper-slide {
-                            width: 31% !important;
-                        }
-                    }
-                    @media (min-width: 1025px) {
-                        .product-recommendations-slider .swiper-slide,
-                        salla-products-slider[source="selected"] .swiper-slide {
-                            width: 24% !important;
-                        }
-                    }
-                `;
-                document.head.appendChild(styleEl);
-            }
-            
-            window.salla?.event?.dispatch('twilight::mutation');
-            this.setupStockFilter(newSlider, numericIds);
-        } catch {
+
+            console.log('[Bundle Recommendations] Custom slider initialized with', numericIds.length, 'products');
+        } catch (error) {
+            console.error('[Bundle Recommendations] Error:', error);
         }
     }
     
-    setupStockFilter(slider, productIds = null) {
-        const handler = (event) => {
-            if (!slider.contains(event.target)) return;
-
-            // Unregister immediately to prevent multiple firings
-            window.salla?.event?.off('salla-products-slider::products.fetched', handler);
-
-            setTimeout(() => {
-                const productCards = slider.querySelectorAll('.s-product-card-entry');
-                if (!productCards.length) return;
-
-                let inStockCount = 0;
-                const maxProducts = 15;
-
-                productCards.forEach(card => {
-                    const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-
-                    if (isOutOfStock || inStockCount >= maxProducts) {
-                        card.style.display = 'none';
-                    } else {
-                        inStockCount++;
-                    }
-                });
-
-                if (productIds?.length) {
-                    this.attachOrdering(slider, productIds);
-                }
-            }, 200);
-        };
-
-        window.salla?.event?.on('salla-products-slider::products.fetched', handler);
-    }
-
     reset() {
         this.initialized = false;
         this.productId = null;
         this.removeExistingRecentlyViewed();
 
-        this.orderObservers.forEach(({ observer }) => observer.disconnect());
-        this.orderObservers.clear();
-
-        this.orderTimers.forEach(timer => clearTimeout(timer));
-        this.orderTimers.clear();
-    }
-
-    attachOrdering(slider, ids) {
-        if (!slider || !ids?.length) return;
-
-        slider.dataset.recommendationOrder = ids.join(',');
-        this.scheduleReorder(slider, ids, true);
-        this.setupOrderObserver(slider, ids);
-    }
-
-    scheduleReorder(slider, ids, immediate = false) {
-        if (!slider || !ids?.length) return;
-
-        const run = () => {
-            if (!slider.isConnected) {
-                this.teardownOrdering(slider);
-                return false;
-            }
-            const wrapper = slider.querySelector('.swiper-wrapper');
-            if (!wrapper) return false;
-            return this.applyOrderOnce(slider, wrapper, ids);
-        };
-
-        if (immediate) {
-            const applied = run();
-            if (applied) return;
-            this.scheduleReorder(slider, ids, false);
-            return;
-        }
-
-        const existing = this.orderTimers.get(slider);
-        if (existing) {
-            clearTimeout(existing);
-        }
-
-        const timer = setTimeout(() => {
-            this.orderTimers.delete(slider);
-            run();
-        }, 80);
-
-        this.orderTimers.set(slider, timer);
-    }
-
-    setupOrderObserver(slider, ids) {
-        const wrapper = slider.querySelector('.swiper-wrapper');
-        if (!wrapper) return;
-
-        const existing = this.orderObservers.get(slider);
-        if (existing) {
-            existing.ids = ids;
-            return;
-        }
-
-        const observer = new MutationObserver((mutations) => {
-            if (!mutations.some(m => m.type === 'childList')) return;
-            if (this.reorderingWrappers.has(wrapper)) return;
-            if (!slider.isConnected) {
-                this.teardownOrdering(slider);
-                return;
-            }
-
-            const state = this.orderObservers.get(slider);
-            const targetIds = state?.ids || ids;
-            if (!targetIds?.length) return;
-
-            this.scheduleReorder(slider, targetIds);
-        });
-
-        observer.observe(wrapper, { childList: true });
-
-        this.orderObservers.set(slider, { observer, ids, wrapper });
-    }
-
-    teardownOrdering(slider) {
-        const state = this.orderObservers.get(slider);
-        if (state) {
-            state.observer.disconnect();
-            this.orderObservers.delete(slider);
-        }
-
-        const timer = this.orderTimers.get(slider);
-        if (timer) {
-            clearTimeout(timer);
-            this.orderTimers.delete(slider);
-        }
-    }
-
-    applyOrderOnce(slider, wrapper, ids) {
-        if (!wrapper || !ids?.length) return false;
-
-        const slides = Array.from(wrapper.querySelectorAll('.s-products-slider-card'));
-        if (!slides.length) return false;
-
-        this.reorderingWrappers.add(wrapper);
-
-        const slideMap = new Map();
-
-        slides.forEach(slide => {
-            const card = slide.querySelector('.s-product-card-entry, custom-salla-product-card');
-            let productId = card?.dataset?.id || card?.getAttribute?.('data-id') || card?.id;
-
-            if (!productId) {
-                const numericId = card?.getAttribute?.('product-id');
-                if (numericId) productId = numericId;
-            }
-
-            if (!productId) {
-                const link = slide.querySelector('.s-product-card-image a, .s-product-card-content-title a');
-                if (link?.href) {
-                    const match = link.href.match(/\/p(\d+)(?:$|\?|\/)/) || link.href.match(/\/product\/[^/]+\/(\d+)/);
-                    if (match?.[1]) productId = match[1];
-                }
-            }
-
-            if (productId) {
-                slideMap.set(String(productId), slide);
+        // Destroy any custom sliders
+        document.querySelectorAll('algolia-recommendations-slider').forEach(slider => {
+            if (slider.destroy) {
+                slider.destroy();
             }
         });
-
-        let reordered = false;
-
-        ids.forEach(id => {
-            const slide = slideMap.get(String(id));
-            if (slide && slide.parentNode === wrapper) {
-                wrapper.appendChild(slide);
-                reordered = true;
-            }
-        });
-
-        if (reordered) {
-            const sallaSlider = slider.querySelector('salla-slider');
-            const swiper = sallaSlider?.swiper;
-
-            swiper?.updateSlides?.();
-            swiper?.updateProgress?.();
-            swiper?.slideTo?.(0, 0, false);
-        }
-
-        requestAnimationFrame(() => this.reorderingWrappers.delete(wrapper));
-
-        return true;
     }
 
     waitForElement(selector, callback) {
