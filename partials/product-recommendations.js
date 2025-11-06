@@ -404,7 +404,7 @@ class ProductRecommendations {
 
         productIds.forEach(id => {
             const slide = document.createElement('div');
-            slide.className = 'swiper-slide algolia-slide';
+            slide.className = 's-products-slider-card swiper-slide algolia-slide';
             slide.dataset.productId = String(id);
 
             const card = cardMap.get(String(id));
@@ -419,6 +419,12 @@ class ProductRecommendations {
             if (cardClone.dataset) {
                 cardClone.dataset.id = String(id);
             }
+            cardClone.classList.add('s-product-card-entry');
+            if (!cardClone.classList.contains('s-product-card-vertical')) {
+                cardClone.classList.add('s-product-card-vertical');
+            }
+            cardClone.classList.remove('swiper-slide');
+            cardClone.classList.remove('slider__item');
             slide.appendChild(cardClone);
             wrapper.appendChild(slide);
         });
