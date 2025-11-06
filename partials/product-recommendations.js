@@ -259,12 +259,12 @@ class ProductRecommendations {
             }
             
             window.salla?.event?.dispatch('twilight::mutation');
-            this.setupStockFilter(newSlider, numericIds);
+            this.setupStockFilter(newSlider);
         } catch {
         }
     }
     
-    setupStockFilter(slider, productIds = null) {
+    setupStockFilter(slider) {
         const handler = (event) => {
             if (!slider.contains(event.target)) return;
 
@@ -287,11 +287,6 @@ class ProductRecommendations {
                         inStockCount++;
                     }
                 });
-
-                // CRITICAL: Reorder cards AFTER stock filtering to preserve Algolia ranking
-                if (productIds && productIds.length) {
-                    this.applyOrderToList(slider, productIds, 5);
-                }
             }, 200);
         };
 
@@ -302,71 +297,6 @@ class ProductRecommendations {
         this.initialized = false;
         this.productId = null;
         this.removeExistingRecentlyViewed();
-    }
-
-    applyOrderToList(container, ids, maxAttempts = 30) {
-        if (!container || !ids || !ids.length) return;
-
-        let attempt = 0;
-        const intervalId = setInterval(() => {
-            attempt++;
-
-            // Find all product cards in this specific container
-            const cards = Array.from(container.querySelectorAll(
-                'custom-salla-product-card, .s-product-card-entry'
-            ));
-
-            // Check if we have cards rendered
-            if (cards.length > 0) {
-                clearInterval(intervalId);
-
-                // Create a map of product ID -> card element
-                const cardMap = new Map();
-                cards.forEach(card => {
-                    // Use same extraction logic as product-card-enhancer.js
-                    let productId = null;
-
-                    // Method 1: data-id attribute (PRIMARY - Salla uses this)
-                    if (card.dataset.id) {
-                        productId = card.dataset.id;
-                    }
-                    // Method 2: id attribute (if numeric)
-                    else if (card.id && !isNaN(card.id)) {
-                        productId = card.id;
-                    }
-                    // Method 3: Extract from product link URL
-                    else {
-                        const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a');
-                        if (link?.href) {
-                            const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
-                            if (match) productId = match[1];
-                        }
-                    }
-
-                    if (productId) {
-                        cardMap.set(String(productId), card);
-                    }
-                });
-
-                // Get the parent container where cards are rendered
-                const parent = cards[0].parentNode;
-                if (!parent) return;
-
-                // Reorder cards to match Redis IDs
-                ids.forEach(redisId => {
-                    const card = cardMap.get(String(redisId));
-                    if (card && parent.contains(card)) {
-                        parent.appendChild(card); // Move to end in correct order
-                    }
-                });
-
-                console.log('[Product Recommendations] Reordered', cards.length, 'cards to match Algolia ranking');
-            } else if (attempt >= maxAttempts) {
-                // Give up after maxAttempts * 100ms
-                clearInterval(intervalId);
-                console.warn('[Product Recommendations] Cards never appeared, skipping reorder');
-            }
-        }, 100); // Check every 100ms
     }
 
     waitForElement(selector, callback) {

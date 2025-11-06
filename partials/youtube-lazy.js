@@ -198,6 +198,44 @@ function createPlaceholderButton(videoUrl, options = {}) {
 
 let thumbnailObserver = null;
 
+function neutralizeInitialYoutubeEmbeds(root = document) {
+  if (!root) return;
+
+  const candidates = [
+    ...root.querySelectorAll('iframe'),
+    ...root.querySelectorAll('embed'),
+    ...root.querySelectorAll('object')
+  ];
+
+  candidates.forEach(node => {
+    const rawSrc = node.src || node.getAttribute('src') || node.data || node.getAttribute('data');
+    if (!rawSrc || !YOUTUBE_REGEX.test(rawSrc)) return;
+
+    // Cancel any in-flight load immediately
+    if ('srcdoc' in node) node.removeAttribute('srcdoc');
+    if ('src' in node) {
+      try { node.src = 'about:blank'; } catch (err) {}
+      node.removeAttribute('src');
+    }
+    if ('data' in node) node.removeAttribute('data');
+
+    const placeholder = createPlaceholderButton(normalizeYoutubeUrl(rawSrc));
+
+    if (node.width) placeholder.style.width = node.width;
+    if (node.height) placeholder.style.height = node.height;
+    if (node.style && node.style.width) placeholder.style.width = node.style.width;
+    if (node.style && node.style.height) placeholder.style.height = node.style.height;
+
+    placeholder.addEventListener('click', handlePlaceholderClick);
+    placeholder.setAttribute('data-click-bound', 'true');
+    initPlaceholderThumbnail(placeholder);
+
+    if (node.parentNode) {
+      node.parentNode.replaceChild(placeholder, node);
+    }
+  });
+}
+
 function loadThumbnail(button) {
   const img = button.querySelector('.yt-placeholder__thumb');
   if (!img) return;
@@ -331,6 +369,7 @@ function handlePlaceholderClick(event) {
  */
 function initYouTubeOptIn(root = document) {
   debug('Initializing YouTube opt-in on root', root === document ? 'document' : root);
+  neutralizeInitialYoutubeEmbeds(root);
   // Process template-based content
   const templateHosts = root.querySelectorAll('[data-yt-template]');
 
@@ -406,12 +445,15 @@ function setupDynamicHandlers() {
   if (window.salla && window.salla.event) {
     window.salla.event.on('salla-products-slider::products.fetched', (payload) => {
       debug('Event: salla-products-slider::products.fetched', payload);
-      initYouTubeOptIn(payload?.container || document);
+      const targetRoot = payload?.container || document;
+      neutralizeInitialYoutubeEmbeds(targetRoot);
+      initYouTubeOptIn(targetRoot);
     });
 
     // Handle quick view
     window.salla.event.on('product::quickview.opened', (payload) => {
       debug('Event: product::quickview.opened', payload);
+      neutralizeInitialYoutubeEmbeds(document);
       initYouTubeOptIn(document);
     });
 
@@ -424,6 +466,7 @@ function setupDynamicHandlers() {
         payload.response.html = sanitizeHtmlString(payload.response.html);
       }
 
+      neutralizeInitialYoutubeEmbeds(document);
       initYouTubeOptIn(document);
     });
   }
@@ -435,6 +478,7 @@ function setupDynamicHandlers() {
       debug('Read more button clicked');
       const moreContent = document.getElementById('more-content');
       if (moreContent) {
+        neutralizeInitialYoutubeEmbeds(moreContent);
         initYouTubeOptIn(moreContent);
       }
     });
@@ -555,6 +599,7 @@ function scanAndReplaceExistingIframes() {
  */
 function init() {
   debug('Initializing module');
+  neutralizeInitialYoutubeEmbeds(document);
   injectYoutubePlaceholderStyles();
   initYouTubeOptIn();
   scanAndReplaceExistingIframes();  // Add scan for existing iframes
