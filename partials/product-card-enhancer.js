@@ -237,6 +237,20 @@ class CardSliderInstance {
     this.sliderInitialized = false;
     this.sliderId = `slider-${productId}-${Date.now()}`;
     this.boundEventHandlers = {};
+    this._maxInitRetries = 5;
+  }
+
+  getImageContainer() {
+    if (this.imageContainer && this.imageContainer.isConnected) {
+      return this.imageContainer;
+    }
+
+    if (!this.imageWrapper?.isConnected) {
+      this.imageWrapper = this.card.querySelector('.s-product-card-image');
+    }
+
+    this.imageContainer = this.imageWrapper?.querySelector('a') || null;
+    return this.imageContainer;
   }
 
   setupLazyInit() {
@@ -267,13 +281,23 @@ class CardSliderInstance {
     this._observer.observe(this.imageWrapper);
   }
 
-  setupImageSlider() {
-    if (!this.imageContainer) return;
+  setupImageSlider(retryCount = 0) {
+    const imageContainer = this.getImageContainer();
+    if (!imageContainer) {
+      if (retryCount < this._maxInitRetries) {
+        setTimeout(() => this.setupImageSlider(retryCount + 1), 100);
+      } else {
+        console.warn(`[Product Card Enhancer] Image link missing for product ${this.productId}`);
+      }
+      return;
+    }
+
+    this.imageContainer = imageContainer;
 
     // Add swipe indicator
     const swipeIndicator = document.createElement('div');
     swipeIndicator.className = 'swipe-indicator';
-    this.imageContainer.appendChild(swipeIndicator);
+    imageContainer.appendChild(swipeIndicator);
 
     // Setup touch/swipe handlers
     let startX = null;
@@ -340,9 +364,9 @@ class CardSliderInstance {
       this.isSwiping = false;
     };
 
-    this.imageContainer.addEventListener('touchstart', this.boundEventHandlers.touchstart, {passive: true});
-    this.imageContainer.addEventListener('touchmove', this.boundEventHandlers.touchmove, {passive: false});
-    this.imageContainer.addEventListener('touchend', this.boundEventHandlers.touchend, {passive: false});
+    imageContainer.addEventListener('touchstart', this.boundEventHandlers.touchstart, {passive: true});
+    imageContainer.addEventListener('touchmove', this.boundEventHandlers.touchmove, {passive: false});
+    imageContainer.addEventListener('touchend', this.boundEventHandlers.touchend, {passive: false});
 
     // Setup mouse handlers (desktop drag)
     this.boundEventHandlers.mousedown = (e) => {
@@ -402,8 +426,8 @@ class CardSliderInstance {
       startX = startY = null;
     };
 
-    this.imageContainer.addEventListener('mousedown', this.boundEventHandlers.mousedown);
-    this.imageContainer.addEventListener('mousemove', this.boundEventHandlers.mousemove);
+    imageContainer.addEventListener('mousedown', this.boundEventHandlers.mousedown);
+    imageContainer.addEventListener('mousemove', this.boundEventHandlers.mousemove);
     window.addEventListener('mouseup', this.boundEventHandlers.mouseup);
 
     // Setup dots (initially with just the main image dot)
@@ -508,9 +532,10 @@ class CardSliderInstance {
   }
 
   addImageToSlider(image, index) {
-    if (!image?.url || !this.imageContainer) return;
+    const imageContainer = this.getImageContainer();
+    if (!image?.url || !imageContainer) return;
 
-    const existingImg = this.imageContainer.querySelector(`.product-slider-image[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
+    const existingImg = imageContainer.querySelector(`.product-slider-image[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
     if (existingImg) return;
 
     const img = document.createElement('img');
@@ -535,7 +560,7 @@ class CardSliderInstance {
       }
     };
 
-    this.imageContainer.appendChild(img);
+    imageContainer.appendChild(img);
   }
 
   checkDotsVisibility() {
@@ -553,8 +578,13 @@ class CardSliderInstance {
 
     this.currentSlide = index;
 
-    const mainImage = this.imageContainer.querySelector('img.lazy, img[loading="lazy"], img:first-child:not(.product-slider-image)');
-    const additionalImages = this.imageContainer.querySelectorAll(`.product-slider-image[data-slider-id="${this.sliderId}"]`);
+    const imageContainer = this.getImageContainer();
+    if (!imageContainer) return;
+
+    this.imageContainer = imageContainer;
+
+    const mainImage = imageContainer.querySelector('img.lazy, img[loading="lazy"], img:first-child:not(.product-slider-image)');
+    const additionalImages = imageContainer.querySelectorAll(`.product-slider-image[data-slider-id="${this.sliderId}"]`);
     const dots = this.imageWrapper.querySelectorAll(`.product-slider-dot[data-slider-id="${this.sliderId}"]`);
 
     dots.forEach(dot => dot.classList.remove('active'));
@@ -577,7 +607,7 @@ class CardSliderInstance {
       }
       additionalImages.forEach(img => img.classList.remove('active'));
 
-      const activeImage = this.imageContainer.querySelector(`.product-slider-image[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
+      const activeImage = imageContainer.querySelector(`.product-slider-image[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
       if (activeImage) {
         activeImage.classList.add('active');
       } else if (mainImage) {
