@@ -167,12 +167,34 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
             return;
         }
 
-        console.log(`[AlgoliaSlider] Found ${productCards.length} products, moving to slider`);
+        console.log(`[AlgoliaSlider] Found ${productCards.length} products from Salla`);
+
+        // Step 1: Build a map of product ID -> card element
+        const cardMap = new Map();
+        productCards.forEach(card => {
+            // Extract product ID from the card's id attribute (format: "product-123456")
+            const productId = card.getAttribute('id') || card.id;
+            if (productId) {
+                // Extract numeric ID from "product-123456" format
+                const numericId = productId.replace('product-', '');
+                cardMap.set(numericId.toString(), card);
+            }
+        });
+
+        console.log('[AlgoliaSlider] Card map keys:', Array.from(cardMap.keys()));
+        console.log('[AlgoliaSlider] Target order from Algolia:', this.productIds);
 
         let inStockCount = 0;
 
-        // Products are already in correct order from source-value
-        productCards.forEach((card) => {
+        // Step 2: Iterate through Algolia's order and append cards in that exact order
+        this.productIds.forEach((productId, index) => {
+            const card = cardMap.get(productId.toString());
+
+            if (!card) {
+                console.warn(`[AlgoliaSlider] Product ${productId} not found in rendered cards`);
+                return;
+            }
+
             // Check if out of stock
             const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
 
@@ -195,9 +217,11 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
 
             // Add to swiper wrapper
             swiperWrapper.appendChild(slide);
+
+            console.log(`[AlgoliaSlider] Added product ${productId} at position ${index}`);
         });
 
-        console.log(`[AlgoliaSlider] Added ${inStockCount} in-stock products to slider`);
+        console.log(`[AlgoliaSlider] Final order: ${inStockCount} in-stock products in Algolia order`);
 
         // Initialize Swiper after products are in place
         this.initializeSwiper();
