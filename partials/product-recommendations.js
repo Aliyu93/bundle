@@ -340,33 +340,68 @@ class ProductRecommendations {
 
                 console.log(`[Bundle Recommendations] Reordered ${reorderedCount} slides to match Algolia ranking`);
 
-                // STEP 5: Filter out-of-stock products AFTER reordering
-                const productCards = swiperWrapper.querySelectorAll('.s-product-card-entry');
-                let inStockCount = 0;
-                const maxProducts = 15;
-
-                productCards.forEach(card => {
-                    const slide = card.closest('.swiper-slide');
-                    const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
-
-                    if (isOutOfStock || inStockCount >= maxProducts) {
-                        if (slide) slide.style.display = 'none';
-                    } else {
-                        if (slide) slide.style.display = '';
-                        inStockCount++;
-                    }
-                });
-
-                // STEP 6: Update Swiper instance to recognize new order
+                // STEP 5: DESTROY AND RECREATE Swiper to force recognition of new order
                 const sallaSlider = slider.querySelector('salla-slider');
                 const swiper = sallaSlider?.swiper;
 
                 if (swiper) {
-                    swiper.update();
-                    swiper.updateSlides();
-                    swiper.updateProgress();
-                    swiper.updateSlidesClasses();
-                    console.log('[Bundle Recommendations] Updated Swiper instance');
+                    console.log('[Bundle Recommendations] Destroying Swiper instance to force rebuild...');
+
+                    // Save Swiper configuration before destroying
+                    const swiperParams = {
+                        ...swiper.params
+                    };
+
+                    // Destroy current Swiper instance completely
+                    swiper.destroy(true, true);
+
+                    // Small delay to ensure cleanup completes
+                    setTimeout(() => {
+                        // Trigger Salla to reinitialize the slider component
+                        window.salla?.event?.dispatch('twilight::mutation');
+
+                        console.log('[Bundle Recommendations] Triggered Salla to reinitialize slider');
+
+                        // Wait for reinit, then filter stock
+                        setTimeout(() => {
+                            const productCards = swiperWrapper.querySelectorAll('.s-product-card-entry');
+                            let inStockCount = 0;
+                            const maxProducts = 15;
+
+                            productCards.forEach(card => {
+                                const slide = card.closest('.swiper-slide');
+                                const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
+
+                                if (isOutOfStock || inStockCount >= maxProducts) {
+                                    if (slide) slide.style.display = 'none';
+                                } else {
+                                    if (slide) slide.style.display = '';
+                                    inStockCount++;
+                                }
+                            });
+
+                            console.log('[Bundle Recommendations] Applied stock filter after Swiper rebuild');
+                        }, 300);
+                    }, 100);
+                } else {
+                    // Fallback if no Swiper instance found
+                    console.warn('[Bundle Recommendations] No Swiper instance found, applying stock filter only');
+
+                    const productCards = swiperWrapper.querySelectorAll('.s-product-card-entry');
+                    let inStockCount = 0;
+                    const maxProducts = 15;
+
+                    productCards.forEach(card => {
+                        const slide = card.closest('.swiper-slide');
+                        const isOutOfStock = card.classList.contains('s-product-card-out-of-stock');
+
+                        if (isOutOfStock || inStockCount >= maxProducts) {
+                            if (slide) slide.style.display = 'none';
+                        } else {
+                            if (slide) slide.style.display = '';
+                            inStockCount++;
+                        }
+                    });
                 }
             }, 200);
         });
