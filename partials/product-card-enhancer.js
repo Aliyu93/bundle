@@ -88,8 +88,7 @@ const injectProductSliderStyles = () => {
 
 class ProductCardEnhancer {
   constructor() {
-    this.enhancedCards = new Set();
-    this.cardInstances = new Map();
+    this.enhancedCards = new WeakSet();
     this.init();
   }
 
@@ -167,7 +166,7 @@ class ProductCardEnhancer {
 
     cards.forEach(card => {
       const productId = this.extractProductId(card);
-      if (productId && !this.enhancedCards.has(productId)) {
+      if (productId && !this.enhancedCards.has(card)) {
         this.enhanceCard(card, productId);
       }
     });
@@ -216,8 +215,7 @@ class ProductCardEnhancer {
 
     // Create instance for this card
     const instance = new CardSliderInstance(card, productId, imageWrapper);
-    this.cardInstances.set(productId, instance);
-    this.enhancedCards.add(productId);
+    this.enhancedCards.add(card);
 
     // Setup lazy initialization when card comes into view
     instance.setupLazyInit();
