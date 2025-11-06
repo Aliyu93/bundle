@@ -109,13 +109,16 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
         productsList.setAttribute('source', 'selected');
         productsList.setAttribute('source-value', JSON.stringify(this.productIds));
         productsList.setAttribute('limit', this.productIds.length.toString());
+        productsList.setAttribute('display-all-url', ''); // Prevent "show all" link
         productsList.className = 'algolia-products-source';
 
-        // Hidden container - Salla renders here, we'll move products to slider
-        const hiddenContainer = document.createElement('div');
-        hiddenContainer.style.cssText = 'position: absolute; left: -9999px; opacity: 0; pointer-events: none;';
-        hiddenContainer.appendChild(productsList);
-        this.appendChild(hiddenContainer);
+        // Temporary container - visible but transparent so images load properly
+        // Using opacity instead of position:absolute left:-9999px to ensure lazy loading works
+        const tempContainer = document.createElement('div');
+        tempContainer.style.cssText = 'opacity: 0; pointer-events: none; position: absolute; z-index: -1; top: 0; left: 0; width: 100%; height: 0; overflow: hidden;';
+        tempContainer.className = 'algolia-temp-container';
+        tempContainer.appendChild(productsList);
+        this.appendChild(tempContainer);
 
         // Dispatch Salla's mutation event to trigger rendering
         window.salla?.event?.dispatch('twilight::mutation');
@@ -132,7 +135,7 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
                 // Small delay to ensure DOM is fully updated
                 setTimeout(() => {
                     this.moveProductsToSlider(productsList, wrapper, filterStock, maxInStock);
-                    hiddenContainer.remove();
+                    tempContainer.remove();
                     resolve();
                 }, 150);
             };
@@ -142,9 +145,9 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
 
             // Fallback timeout in case event doesn't fire
             setTimeout(() => {
-                if (hiddenContainer.parentNode) {
+                if (tempContainer.parentNode) {
                     this.moveProductsToSlider(productsList, wrapper, filterStock, maxInStock);
-                    hiddenContainer.remove();
+                    tempContainer.remove();
                     resolve();
                 }
             }, 3000);
@@ -153,6 +156,7 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
 
     /**
      * Extract product cards from salla-products-list and move to swiper
+     * IMPORTANT: We MOVE nodes instead of cloning to preserve web component state
      */
     moveProductsToSlider(productsList, swiperWrapper, filterStock, maxInStock) {
         // Get all product cards rendered by Salla
@@ -185,9 +189,9 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
             const slide = document.createElement('div');
             slide.className = 's-products-slider-card swiper-slide';
 
-            // Clone the card to preserve all functionality
-            const clonedCard = card.cloneNode(true);
-            slide.appendChild(clonedCard);
+            // MOVE the card (not clone!) - this preserves web component state
+            // appendChild() moves the node if it already exists in the DOM
+            slide.appendChild(card);
 
             // Add to swiper wrapper
             swiperWrapper.appendChild(slide);
