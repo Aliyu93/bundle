@@ -259,12 +259,12 @@ class ProductRecommendations {
             }
             
             window.salla?.event?.dispatch('twilight::mutation');
-            this.setupStockFilter(newSlider);
+            this.setupStockFilter(newSlider, numericIds);
         } catch {
         }
     }
     
-    setupStockFilter(slider) {
+    setupStockFilter(slider, productIds = null) {
         const handler = (event) => {
             if (!slider.contains(event.target)) return;
 
@@ -287,16 +287,82 @@ class ProductRecommendations {
                         inStockCount++;
                     }
                 });
+
+                if (productIds?.length) {
+                    this.ensureOrder(slider, productIds);
+                }
             }, 200);
         };
 
         window.salla?.event?.on('salla-products-slider::products.fetched', handler);
     }
-    
+
     reset() {
         this.initialized = false;
         this.productId = null;
         this.removeExistingRecentlyViewed();
+    }
+
+    ensureOrder(slider, ids, maxAttempts = 15, attempt = 0) {
+        if (!slider || !ids?.length) return;
+
+        const applied = this.applyOrderOnce(slider, ids);
+        if (applied || attempt >= maxAttempts) return;
+
+        setTimeout(() => this.ensureOrder(slider, ids, maxAttempts, attempt + 1), 120);
+    }
+
+    applyOrderOnce(slider, ids) {
+        const wrapper = slider.querySelector('.swiper-wrapper');
+        if (!wrapper) return false;
+
+        const slides = Array.from(wrapper.querySelectorAll('.s-products-slider-card'));
+        if (!slides.length) return false;
+
+        const slideMap = new Map();
+
+        slides.forEach(slide => {
+            const card = slide.querySelector('.s-product-card-entry, custom-salla-product-card');
+            let productId = card?.dataset?.id || card?.getAttribute?.('data-id') || card?.id;
+
+            if (!productId) {
+                const numericId = card?.getAttribute?.('product-id');
+                if (numericId) productId = numericId;
+            }
+
+            if (!productId) {
+                const link = slide.querySelector('.s-product-card-image a, .s-product-card-content-title a');
+                if (link?.href) {
+                    const match = link.href.match(/\/p(\d+)(?:$|\?|\/)/) || link.href.match(/\/product\/[^/]+\/(\d+)/);
+                    if (match?.[1]) productId = match[1];
+                }
+            }
+
+            if (productId) {
+                slideMap.set(String(productId), slide);
+            }
+        });
+
+        let reordered = false;
+
+        ids.forEach(id => {
+            const slide = slideMap.get(String(id));
+            if (slide && slide.parentNode === wrapper) {
+                wrapper.appendChild(slide);
+                reordered = true;
+            }
+        });
+
+        if (reordered) {
+            const sallaSlider = slider.querySelector('salla-slider');
+            const swiper = sallaSlider?.swiper;
+
+            swiper?.updateSlides?.();
+            swiper?.updateProgress?.();
+            swiper?.slideTo?.(0, 0, false);
+        }
+
+        return reordered;
     }
 
     waitForElement(selector, callback) {

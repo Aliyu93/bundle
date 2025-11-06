@@ -26,12 +26,12 @@ function injectYoutubePlaceholderStyles() {
       width: 100%;
       aspect-ratio: 16 / 9;
       margin: 1rem 0;
-      border-radius: 0.5rem;
+      border-radius: 0.375rem;
       overflow: hidden;
       border: none;
       padding: 0;
       background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
-      transition: background 0.35s ease;
+      transition: background 0.3s ease;
     }
     .yt-placeholder__thumb {
       position: absolute;
@@ -39,81 +39,47 @@ function injectYoutubePlaceholderStyles() {
       width: 100%;
       height: 100%;
       object-fit: cover;
-      transition: transform 0.35s ease, filter 0.3s ease;
+      transition: transform 0.35s ease, filter 0.3s ease, opacity 0.3s ease;
       z-index: 0;
-    }
-    .yt-placeholder__overlay {
-      position: relative;
-      z-index: 1;
-      display: flex;
-      align-items: center;
-      gap: 0.75rem;
-      padding: 0.75rem 1.25rem;
-      border-radius: 9999px;
-      background: rgba(0, 0, 0, 0.6);
-      color: #fff;
-      font-weight: 600;
-      letter-spacing: 0.01em;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-      backdrop-filter: blur(8px);
     }
     .yt-placeholder__icon {
       position: relative;
-      width: 3rem;
-      height: 3rem;
-      border-radius: 9999px;
-      background: rgba(255, 255, 255, 0.95);
-      display: flex;
+      z-index: 1;
+      display: inline-flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
-    }
-    .yt-placeholder__icon::before {
-      content: '';
-      display: inline-block;
-      width: 0;
-      height: 0;
-      border-style: solid;
-      border-width: 0.55rem 0 0.55rem 0.95rem;
-      border-color: transparent transparent transparent #1f1f1f;
-      margin-left: 0.2rem;
-    }
-    .yt-placeholder__label {
-      font-size: 1rem;
-      line-height: 1.4;
-      white-space: nowrap;
+      width: 4rem;
+      height: 4rem;
+      border-radius: 50%;
+      background: rgba(255, 255, 255, 0.9);
+      color: #282828;
+      font-size: 1.5rem;
+      line-height: 1;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+      transition: transform 0.2s ease, background 0.2s ease;
     }
     .yt-placeholder:hover {
       background: linear-gradient(135deg, #c62828 0%, #e53935 100%);
     }
     .yt-placeholder:hover .yt-placeholder__thumb {
       transform: scale(1.03);
-      filter: brightness(0.75);
-    }
-    .yt-placeholder:hover .yt-placeholder__overlay {
-      background: rgba(0, 0, 0, 0.7);
+      filter: brightness(0.8);
     }
     .yt-placeholder:focus-visible {
       outline: 3px solid #c62828;
-      outline-offset: 3px;
+      outline-offset: 2px;
     }
-    .yt-placeholder:focus-visible .yt-placeholder__overlay {
-      background: rgba(0, 0, 0, 0.75);
+    .yt-placeholder:focus-visible .yt-placeholder__icon {
+      transform: scale(1.1);
+    }
+    .yt-placeholder:active .yt-placeholder__icon {
+      transform: scale(0.95);
     }
     @media (max-width: 640px) {
-      .yt-placeholder__overlay {
-        padding: 0.6rem 1rem;
-        gap: 0.6rem;
-      }
       .yt-placeholder__icon {
-        width: 2.5rem;
-        height: 2.5rem;
-      }
-      .yt-placeholder__icon::before {
-        border-width: 0.45rem 0 0.45rem 0.75rem;
-      }
-      .yt-placeholder__label {
-        font-size: 0.9rem;
+        width: 3.25rem;
+        height: 3.25rem;
+        font-size: 1.25rem;
       }
     }
   `;
@@ -173,25 +139,21 @@ function createPlaceholderButton(videoUrl, options = {}) {
     img.alt = options.thumbnailAlt || 'Video thumbnail';
     img.loading = 'lazy';
     img.decoding = 'async';
-    img.setAttribute('data-src', thumbnailUrl);
+    if (customThumbnail) {
+      img.src = thumbnailUrl;
+      button.dataset.thumbLoaded = 'true';
+    } else {
+      img.setAttribute('data-src', thumbnailUrl);
+    }
     button.dataset.ytThumbSrc = thumbnailUrl;
     button.appendChild(img);
   }
 
-  const overlay = document.createElement('span');
-  overlay.className = 'yt-placeholder__overlay';
-
   const icon = document.createElement('span');
   icon.className = 'yt-placeholder__icon';
   icon.setAttribute('aria-hidden', 'true');
-  overlay.appendChild(icon);
-
-  const label = document.createElement('span');
-  label.className = 'yt-placeholder__label';
-  label.textContent = 'مشاهدة فيديو المنتج';
-  overlay.appendChild(label);
-
-  button.appendChild(overlay);
+  icon.textContent = '▶';
+  button.appendChild(icon);
 
   return button;
 }
