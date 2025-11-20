@@ -86,6 +86,25 @@ const injectProductSliderStyles = () => {
   document.head.appendChild(style);
 };
 
+// Simple caches to avoid redundant fetches and support bulk hydration
+const imageResponseCache = new Map(); // productId -> { images, main_image? }
+const inflightImageRequests = new Map(); // productId -> Promise
+const IMAGE_REQUEST_BASE = 'https://productstoredis-163858290861.me-central2.run.app/product-images';
+
+async function fetchBulkProductImages(productIds) {
+  if (!productIds || productIds.length === 0) return {};
+  const url = `${IMAGE_REQUEST_BASE}?ids=${encodeURIComponent(productIds.join(','))}`;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort('timeout'), 5000);
+  try {
+    const res = await fetch(url, { signal: controller.signal });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    return await res.json();
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
 class ProductCardEnhancer {
   constructor() {
     this.enhancedCards = new WeakSet();
@@ -113,11 +132,13 @@ class ProductCardEnhancer {
     document.addEventListener('salla-products-slider::products.fetched', (e) => {
       console.log('[Product Card Enhancer] Products slider fetched');
       setTimeout(() => this.enhanceExistingCards(), 100);
+      this.prefetchProductImagesFromList(e.target);
     });
 
     document.addEventListener('salla-products-list::products.fetched', (e) => {
       console.log('[Product Card Enhancer] Products list fetched');
       setTimeout(() => this.enhanceExistingCards(), 100);
+      this.prefetchProductImagesFromList(e.target);
     });
 
     // Listen for page changes (SPA navigation)
@@ -128,6 +149,48 @@ class ProductCardEnhancer {
 
     // MutationObserver as fallback for dynamically added cards
     this.setupMutationObserver();
+  }
+
+  prefetchProductImagesFromList(target) {
+    const lists = [];
+    if (target?.matches?.('salla-products-list')) {
+      lists.push(target);
+    } else {
+      document.querySelectorAll('salla-products-list').forEach(l => lists.push(l));
+    }
+
+    const ids = new Set();
+    lists.forEach(list => {
+      const sourceValue = list.getAttribute('source-value');
+      if (sourceValue) {
+        try {
+          const parsed = JSON.parse(sourceValue);
+          if (Array.isArray(parsed)) {
+            parsed.forEach(id => ids.add(String(id)));
+          }
+        } catch (e) {}
+      }
+
+      // fallback scrape if list lacks source-value
+      list.querySelectorAll('.s-product-card-entry').forEach(card => {
+        const id = this.extractProductId(card);
+        if (id) ids.add(String(id));
+      });
+    });
+
+    const idsToFetch = Array.from(ids).filter(id => !imageResponseCache.has(id));
+    if (!idsToFetch.length) return;
+
+    fetchBulkProductImages(idsToFetch)
+      .then(payload => {
+        if (!payload || typeof payload !== 'object') return;
+        Object.entries(payload).forEach(([pid, data]) => {
+          if (data && data.images) {
+            imageResponseCache.set(String(pid), data);
+          }
+        });
+      })
+      .catch(err => console.warn('[Product Card Enhancer] Bulk fetch failed', err));
   }
 
   setupMutationObserver() {
@@ -471,19 +534,43 @@ class CardSliderInstance {
   fetchProductImages() {
     if (!this.productId) return;
 
-    const requestUrl = `https://productstoredis-163858290861.me-central2.run.app/product-images/${this.productId}`;
+    // Serve from cache if already prefetched
+    if (imageResponseCache.has(this.productId)) {
+      this.processImageResponse(imageResponseCache.get(this.productId));
+      return;
+    }
 
-    fetch(requestUrl, { timeout: 5000 })
-      .then(response => response.json())
-      .then(data => this.processImageResponse(data))
+    const requestUrl = `${IMAGE_REQUEST_BASE}/${this.productId}`;
+
+    // de-dupe per product.
+    if (inflightImageRequests.has(this.productId)) {
+      inflightImageRequests.get(this.productId)
+        .then(data => this.processImageResponse(data))
+        .catch(() => this.hideDots());
+      return;
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort('timeout'), 5000);
+    const p = fetch(requestUrl, { signal: controller.signal })
+      .then(res => {
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        return res.json();
+      })
+      .then(data => {
+        imageResponseCache.set(this.productId, data);
+        this.processImageResponse(data);
+      })
       .catch(error => {
         console.warn(`[Product Card Enhancer] Failed to fetch images for product ${this.productId}:`, error);
-        // Hide dots if no additional images
-        const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
-        if (dotsContainer) {
-          dotsContainer.style.display = 'none';
-        }
+        this.hideDots();
+      })
+      .finally(() => {
+        clearTimeout(timeoutId);
+        inflightImageRequests.delete(this.productId);
       });
+
+    inflightImageRequests.set(this.productId, p);
   }
 
   processImageResponse(data) {
@@ -568,6 +655,13 @@ class CardSliderInstance {
     if (dotsContainer) {
       const availableDots = dotsContainer.querySelectorAll('.product-slider-dot');
       dotsContainer.style.display = availableDots.length <= 1 ? 'none' : 'flex';
+    }
+  }
+
+  hideDots() {
+    const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
+    if (dotsContainer) {
+      dotsContainer.style.display = 'none';
     }
   }
 
