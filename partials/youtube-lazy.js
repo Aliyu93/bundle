@@ -139,12 +139,8 @@ function createPlaceholderButton(videoUrl, options = {}) {
     img.alt = options.thumbnailAlt || 'Video thumbnail';
     img.loading = 'lazy';
     img.decoding = 'async';
-    if (customThumbnail) {
-      img.src = thumbnailUrl;
-      button.dataset.thumbLoaded = 'true';
-    } else {
-      img.setAttribute('data-src', thumbnailUrl);
-    }
+    // Always defer setting the src so no network call happens until we intend to load it
+    img.setAttribute('data-src', thumbnailUrl);
     button.dataset.ytThumbSrc = thumbnailUrl;
     button.appendChild(img);
   }
