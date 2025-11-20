@@ -9,6 +9,51 @@ const debug = (...args) => console.log(LOG_PREFIX, ...args);
 
 const YOUTUBE_REGEX = /\/\/(www\.)?(youtube\.com|youtube-nocookie\.com|youtu\.be)\//i;
 
+
+let iframePatchesApplied = false;
+
+function guardYouTubeSrcAssignments() {
+  if (iframePatchesApplied) return;
+  if (typeof HTMLIFrameElement === 'undefined' || typeof Element === 'undefined') return;
+
+  iframePatchesApplied = true;
+
+  const iframeSrcDescriptor = Object.getOwnPropertyDescriptor(HTMLIFrameElement.prototype, 'src');
+  const originalSetAttribute = Element.prototype.setAttribute;
+
+  // Block setting YouTube src on iframes unless explicitly opt-in
+  if (iframeSrcDescriptor && iframeSrcDescriptor.set) {
+    Object.defineProperty(HTMLIFrameElement.prototype, 'src', {
+      configurable: true,
+      enumerable: iframeSrcDescriptor.enumerable,
+      get: iframeSrcDescriptor.get,
+      set(value) {
+        if (value && YOUTUBE_REGEX.test(value) && this.dataset.ytOptIn !== 'true') {
+          this.dataset.ytBlockedSrc = value;
+          return value;
+        }
+        return iframeSrcDescriptor.set.call(this, value);
+      }
+    });
+  }
+
+  Element.prototype.setAttribute = function patchedSetAttribute(name, value) {
+    if (this.tagName === 'IFRAME' && name && name.toLowerCase() === 'src') {
+      if (value && YOUTUBE_REGEX.test(value) && this.dataset.ytOptIn !== 'true') {
+        this.dataset.ytBlockedSrc = value;
+        this.removeAttribute('src');
+        return;
+      }
+    }
+    return originalSetAttribute.call(this, name, value);
+  };
+}
+
+// Guard as early as possible to prevent eager iframe loads
+if (typeof window !== 'undefined') {
+  guardYouTubeSrcAssignments();
+}
+
 let youtubeStylesInjected = false;
 
 function injectYoutubePlaceholderStyles() {
@@ -166,7 +211,7 @@ function neutralizeInitialYoutubeEmbeds(root = document) {
   ];
 
   candidates.forEach(node => {
-    const rawSrc = node.src || node.getAttribute('src') || node.data || node.getAttribute('data');
+    const rawSrc = node.src || node.getAttribute('src') || node.data || node.getAttribute('data') || node.dataset?.ytBlockedSrc;
     if (!rawSrc || !YOUTUBE_REGEX.test(rawSrc)) return;
 
     // Cancel any in-flight load immediately
@@ -254,7 +299,7 @@ function sanitizeFragment(fragment) {
   const elements = [...iframes, ...embeds, ...objects];
 
   elements.forEach(element => {
-    const src = element.src || element.data || element.getAttribute('src') || element.getAttribute('data');
+    const src = element.src || element.data || element.getAttribute('src') || element.getAttribute('data') || element.dataset?.ytBlockedSrc;
 
     if (src && YOUTUBE_REGEX.test(src)) {
       // Extract and normalize the URL
@@ -305,6 +350,7 @@ function handlePlaceholderClick(event) {
   // Create iframe
   const iframe = document.createElement('iframe');
   const autoplayUrl = `${baseUrl}${baseUrl.includes('?') ? '&' : '?'}autoplay=1&rel=0`;
+  iframe.dataset.ytOptIn = 'true';
   iframe.src = autoplayUrl;
   iframe.width = button.style.width || '100%';
   iframe.height = button.style.height || '100%';
@@ -313,7 +359,6 @@ function handlePlaceholderClick(event) {
   iframe.allow = 'accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share';
   iframe.allowFullscreen = true;
   iframe.style.aspectRatio = '16/9';
-  iframe.dataset.ytOptIn = 'true';
 
   // Replace placeholder with iframe
   button.parentNode.replaceChild(iframe, button);
@@ -469,7 +514,7 @@ function setupDynamicHandlers() {
             return;
           }
 
-          const src = iframe.src || iframe.getAttribute('src');
+          const src = iframe.src || iframe.getAttribute('src') || iframe.dataset?.ytBlockedSrc;
           if (src && YOUTUBE_REGEX.test(src)) {
             // Stop loading immediately - remove attributes
             debug('Stray iframe detected, neutralizing', iframe);
@@ -514,7 +559,7 @@ function scanAndReplaceExistingIframes() {
   let replacedCount = 0;
 
   allIframes.forEach(iframe => {
-    const src = iframe.src || iframe.getAttribute('src');
+    const src = iframe.src || iframe.getAttribute('src') || iframe.dataset?.ytBlockedSrc;
 
     // Check if it's a YouTube iframe
     if (src && YOUTUBE_REGEX.test(src)) {
