@@ -89,7 +89,16 @@ const injectProductSliderStyles = () => {
 // Simple caches to avoid redundant fetches and support bulk hydration
 const imageResponseCache = new Map(); // productId -> { images, main_image? }
 const inflightImageRequests = new Map(); // productId -> Promise
+const pendingBulkIds = new Set();
 const IMAGE_REQUEST_BASE = 'https://productstoredis-163858290861.me-central2.run.app/product-images';
+
+const chunkArray = (arr, size) => {
+  const chunks = [];
+  for (let i = 0; i < arr.length; i += size) {
+    chunks.push(arr.slice(i, i + size));
+  }
+  return chunks;
+};
 
 async function fetchBulkProductImages(productIds) {
   if (!productIds || productIds.length === 0) return {};
@@ -178,19 +187,28 @@ class ProductCardEnhancer {
       });
     });
 
-    const idsToFetch = Array.from(ids).filter(id => !imageResponseCache.has(id));
+    const idsToFetch = Array.from(ids)
+      .filter(id => !imageResponseCache.has(id) && !pendingBulkIds.has(id));
     if (!idsToFetch.length) return;
 
-    fetchBulkProductImages(idsToFetch)
-      .then(payload => {
-        if (!payload || typeof payload !== 'object') return;
-        Object.entries(payload).forEach(([pid, data]) => {
-          if (data && data.images) {
-            imageResponseCache.set(String(pid), data);
-          }
+    const chunks = chunkArray(idsToFetch, 100);
+    chunks.forEach(chunk => {
+      chunk.forEach(id => pendingBulkIds.add(id));
+      fetchBulkProductImages(chunk)
+        .then(payload => {
+          if (!payload || typeof payload !== 'object') return;
+          Object.entries(payload).forEach(([pid, data]) => {
+            if (data && data.images) {
+              imageResponseCache.set(String(pid), data);
+            }
+            pendingBulkIds.delete(String(pid));
+          });
+        })
+        .catch(err => {
+          console.warn('[Product Card Enhancer] Bulk fetch failed', err);
+          chunk.forEach(id => pendingBulkIds.delete(id));
         });
-      })
-      .catch(err => console.warn('[Product Card Enhancer] Bulk fetch failed', err));
+    });
   }
 
   setupMutationObserver() {
