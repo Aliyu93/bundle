@@ -91,6 +91,11 @@ const imageResponseCache = new Map(); // productId -> { images, main_image? }
 const inflightImageRequests = new Map(); // productId -> Promise
 const pendingBulkIds = new Set();
 const IMAGE_REQUEST_BASE = 'https://productstoredis-163858290861.me-central2.run.app/product-images';
+const BULK_CHUNK_SIZE = 100;
+const BULK_RETRY_MAX = 1;
+const BULK_RETRY_MIN_DELAY = 200;
+const BULK_RETRY_MAX_DELAY = 400;
+const PENDING_GRACE_MS = 400;
 
 const chunkArray = (arr, size) => {
   const chunks = [];
@@ -141,13 +146,13 @@ class ProductCardEnhancer {
     document.addEventListener('salla-products-slider::products.fetched', (e) => {
       console.log('[Product Card Enhancer] Products slider fetched');
       setTimeout(() => this.enhanceExistingCards(), 100);
-      this.prefetchProductImagesFromList(e.target);
+      this.schedulePrefetch(e.target);
     });
 
     document.addEventListener('salla-products-list::products.fetched', (e) => {
       console.log('[Product Card Enhancer] Products list fetched');
       setTimeout(() => this.enhanceExistingCards(), 100);
-      this.prefetchProductImagesFromList(e.target);
+      this.schedulePrefetch(e.target);
     });
 
     // Listen for page changes (SPA navigation)
@@ -158,6 +163,11 @@ class ProductCardEnhancer {
 
     // MutationObserver as fallback for dynamically added cards
     this.setupMutationObserver();
+  }
+
+  schedulePrefetch(target) {
+    clearTimeout(this._prefetchTimer);
+    this._prefetchTimer = setTimeout(() => this.prefetchProductImagesFromList(target), 75);
   }
 
   prefetchProductImagesFromList(target) {
@@ -191,8 +201,9 @@ class ProductCardEnhancer {
       .filter(id => !imageResponseCache.has(id) && !pendingBulkIds.has(id));
     if (!idsToFetch.length) return;
 
-    const chunks = chunkArray(idsToFetch, 100);
-    chunks.forEach(chunk => {
+    const chunks = chunkArray(idsToFetch, BULK_CHUNK_SIZE);
+
+    const runChunk = (chunk, attempt = 0) => {
       chunk.forEach(id => pendingBulkIds.add(id));
       fetchBulkProductImages(chunk)
         .then(payload => {
@@ -201,14 +212,22 @@ class ProductCardEnhancer {
             if (data && data.images) {
               imageResponseCache.set(String(pid), data);
             }
-            pendingBulkIds.delete(String(pid));
           });
         })
         .catch(err => {
           console.warn('[Product Card Enhancer] Bulk fetch failed', err);
+          if (attempt < BULK_RETRY_MAX) {
+            const delay = Math.floor(Math.random() * (BULK_RETRY_MAX_DELAY - BULK_RETRY_MIN_DELAY + 1)) + BULK_RETRY_MIN_DELAY;
+            setTimeout(() => runChunk(chunk, attempt + 1), delay);
+          }
+        })
+        .finally(() => {
+          // If a retry is scheduled, pending will be re-added; if not, allow fallback
           chunk.forEach(id => pendingBulkIds.delete(id));
         });
-    });
+    };
+
+    chunks.forEach(chunk => runChunk(chunk));
   }
 
   setupMutationObserver() {
@@ -557,6 +576,27 @@ class CardSliderInstance {
       this.processImageResponse(imageResponseCache.get(this.productId));
       return;
     }
+
+    // If a bulk request is already pending for this ID, wait briefly before falling back
+    if (pendingBulkIds.has(this.productId)) {
+      setTimeout(() => {
+        if (imageResponseCache.has(this.productId)) {
+          this.processImageResponse(imageResponseCache.get(this.productId));
+          return;
+        }
+        if (pendingBulkIds.has(this.productId)) {
+          // Bulk still pending; proceed with single fetch as fallback
+          this.performSingleFetch();
+        }
+      }, PENDING_GRACE_MS);
+      return;
+    }
+
+    this.performSingleFetch();
+  }
+
+  performSingleFetch() {
+    if (!this.productId) return;
 
     const requestUrl = `${IMAGE_REQUEST_BASE}/${this.productId}`;
 
