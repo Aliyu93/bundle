@@ -6,10 +6,74 @@ class CartAddonsSlider extends HTMLElement {
         this.initialized = false;
         this.productIds = [];
         this.structureReady = false;
+        this.cartListenerBound = false;
+        this.reloadScheduled = false;
+        this.reloadTimer = null;
+    }
+
+    /**
+     * Check if we're on the cart page
+     */
+    isCartPage() {
+        return window.location.pathname.includes('/cart') &&
+               document.querySelector('form[id^="item-"]') !== null;
+    }
+
+    /**
+     * Debounced page reload after cart item added
+     */
+    scheduleReload() {
+        // Only act on cart page
+        if (!this.isCartPage()) return;
+
+        // Prevent stacking
+        if (this.reloadScheduled) return;
+        this.reloadScheduled = true;
+
+        // Clear any existing timer
+        if (this.reloadTimer) {
+            clearTimeout(this.reloadTimer);
+        }
+
+        // Reload after 1 second debounce
+        this.reloadTimer = setTimeout(() => {
+            console.log('[CartAddonsSlider] Reloading cart page to show added item');
+            window.location.reload();
+        }, 1000);
+    }
+
+    /**
+     * Setup listeners for cart add success events
+     * Only activates on cart page
+     */
+    setupCartRefreshListener() {
+        // Guard: only bind once
+        if (this.cartListenerBound) return;
+
+        // Guard: only on cart page
+        if (!this.isCartPage()) return;
+
+        this.cartListenerBound = true;
+
+        const handler = () => this.scheduleReload();
+
+        // Primary: Salla's cart event API
+        if (window.salla?.cart?.event?.on) {
+            window.salla.cart.event.on('added', handler);
+            console.log('[CartAddonsSlider] Listening to salla.cart.event.on("added")');
+        }
+
+        // Fallback: Document event
+        document.addEventListener('salla::cart::item.added', handler);
+        console.log('[CartAddonsSlider] Listening to salla::cart::item.added');
     }
 
     connectedCallback() {
         this.ensureStructure();
+
+        // Setup cart refresh listener (only on cart page)
+        this.setupCartRefreshListener();
+
         if (this.initialized) return;
 
         this.getHighestValueItemFromDOM()
