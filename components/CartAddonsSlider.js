@@ -57,10 +57,10 @@ class CartAddonsSlider extends HTMLElement {
 
         const handler = () => this.scheduleReload();
 
-        // Primary: Salla's cart event API
-        if (window.salla?.cart?.event?.on) {
-            window.salla.cart.event.on('added', handler);
-            console.log('[CartAddonsSlider] Listening to salla.cart.event.on("added")');
+        // Primary: Salla's cart event API (correct method)
+        if (window.salla?.cart?.event?.onItemAdded) {
+            window.salla.cart.event.onItemAdded(() => this.scheduleReload());
+            console.log('[CartAddonsSlider] Listening to salla.cart.event.onItemAdded()');
         }
 
         // Fallback: Document event
