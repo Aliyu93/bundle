@@ -1,13 +1,15 @@
 /**
  * Product Card Image Slider Enhancer
  * Adds multi-image slider (3 images) to Salla product cards
- * Robust timing: handles async rendering with multi-pass scanning
+ *
+ * Design: Eager UI setup (dots added immediately) + lazy image loading
+ * Detection: DOM-only (checks for .product-slider-dots)
+ * Timing: Continuous polling with smart auto-stop
  */
 
 const IMAGE_API_BASE = 'https://productstoredis-163858290861.me-central2.run.app/product-images';
-const BULK_CHUNK_SIZE = 50;
 
-// Caches
+// Image cache
 const imageCache = new Map();
 const pendingRequests = new Map();
 
@@ -18,10 +20,13 @@ const SLIDER_STYLES = `
   bottom: 10px;
   left: 0;
   right: 0;
-  display: flex;
+  display: none;
   justify-content: center;
   gap: 6px;
   z-index: 50;
+}
+.product-slider-dots.has-images {
+  display: flex;
 }
 .product-slider-dot {
   width: 8px;
@@ -89,38 +94,9 @@ function injectStyles() {
 }
 
 /**
- * Fetch images for multiple products in one request
+ * Fetch images for a single product (with caching and deduplication)
  */
-async function fetchBulkImages(productIds) {
-  if (!productIds.length) return {};
-
-  const url = `${IMAGE_API_BASE}?ids=${productIds.join(',')}`;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 5000);
-
-  try {
-    const res = await fetch(url, { signal: controller.signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    const data = await res.json();
-
-    // Cache results
-    Object.entries(data).forEach(([id, imgData]) => {
-      if (imgData?.images) imageCache.set(String(id), imgData);
-    });
-
-    return data;
-  } catch (e) {
-    console.warn('[Card Enhancer] Bulk fetch failed:', e.message);
-    return {};
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-/**
- * Fetch images for a single product
- */
-async function fetchSingleImages(productId) {
+async function fetchImages(productId) {
   if (imageCache.has(productId)) {
     return imageCache.get(productId);
   }
@@ -130,19 +106,23 @@ async function fetchSingleImages(productId) {
   }
 
   const promise = (async () => {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-
     try {
-      const res = await fetch(`${IMAGE_API_BASE}/${productId}`, { signal: controller.signal });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+
+      const res = await fetch(`${IMAGE_API_BASE}/${productId}`, {
+        signal: controller.signal
+      });
+      clearTimeout(timeout);
+
+      if (!res.ok) return null;
+
       const data = await res.json();
       imageCache.set(productId, data);
       return data;
     } catch (e) {
       return null;
     } finally {
-      clearTimeout(timeout);
       pendingRequests.delete(productId);
     }
   })();
@@ -152,288 +132,233 @@ async function fetchSingleImages(productId) {
 }
 
 /**
- * Main enhancer class
+ * Main enhancer - uses continuous polling with smart auto-stop
  */
 class ProductCardEnhancer {
   constructor() {
-    this.enhanced = new WeakSet();
-    this.scanPending = false;
-    this.scanCount = 0;
-    this.maxScans = 30;
+    this.polling = false;
+    this.lastEnhanceTime = 0;
+    this.pollInterval = 100; // Poll every 100ms
+    this.stopAfterIdle = 5000; // Stop after 5s of no new enhancements
     this.init();
   }
 
   init() {
     injectStyles();
 
-    // Scan immediately
-    this.scheduleScan(0);
+    // Start polling immediately
+    this.startPolling();
 
-    // Scan on DOMContentLoaded
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', () => this.scheduleScan(0));
-    }
+    // Re-activate polling on any content change
+    const reactivate = () => {
+      this.lastEnhanceTime = Date.now(); // Reset idle timer
+      this.startPolling();
+    };
 
-    // Scan on window load
-    window.addEventListener('load', () => {
-      this.scheduleScan(100);
-      this.scheduleScan(500);
-    });
+    // DOM events
+    document.addEventListener('DOMContentLoaded', reactivate);
+    window.addEventListener('load', reactivate);
 
-    // Salla events - scan with multiple delays to catch async renders
-    const sallaEvents = [
+    // Salla events
+    [
       'salla-products-slider::products.fetched',
       'salla-products-list::products.fetched',
       'salla::page::changed',
       'theme::ready'
-    ];
+    ].forEach(evt => document.addEventListener(evt, reactivate));
 
-    sallaEvents.forEach(event => {
-      document.addEventListener(event, () => {
-        this.scanCount = 0; // Reset scan count on new content
-        this.scheduleScan(50);
-        this.scheduleScan(200);
-        this.scheduleScan(500);
-      });
-    });
-
-    // MutationObserver for dynamic content
-    this.setupObserver();
-
-    console.log('[Card Enhancer] Initialized');
-  }
-
-  setupObserver() {
-    const observer = new MutationObserver((mutations) => {
-      let hasNewContent = false;
-
-      for (const mutation of mutations) {
-        for (const node of mutation.addedNodes) {
-          if (node.nodeType === Node.ELEMENT_NODE) {
-            if (node.classList?.contains('s-product-card-entry') ||
-                node.classList?.contains('s-products-list-wrapper') ||
-                node.querySelector?.('.s-product-card-entry')) {
-              hasNewContent = true;
-              break;
-            }
+    // MutationObserver as backup trigger
+    new MutationObserver((mutations) => {
+      for (const m of mutations) {
+        for (const node of m.addedNodes) {
+          if (node.nodeType === 1 && (
+            node.classList?.contains('s-product-card-entry') ||
+            node.querySelector?.('.s-product-card-entry')
+          )) {
+            reactivate();
+            return;
           }
         }
-        if (hasNewContent) break;
       }
+    }).observe(document.body, { childList: true, subtree: true });
 
-      if (hasNewContent) {
-        this.scanCount = 0;
-        this.scheduleScan(10);
-        this.scheduleScan(100);
-      }
-    });
-
-    observer.observe(document.body, { childList: true, subtree: true });
+    console.log('[Card Enhancer] Initialized with continuous polling');
   }
 
-  scheduleScan(delay = 0) {
-    setTimeout(() => {
-      requestAnimationFrame(() => this.scan());
-    }, delay);
+  startPolling() {
+    if (this.polling) return;
+    this.polling = true;
+    this.poll();
+  }
+
+  poll() {
+    if (!this.polling) return;
+
+    const count = this.scan();
+
+    if (count > 0) {
+      this.lastEnhanceTime = Date.now();
+    }
+
+    // Stop if idle for too long
+    if (Date.now() - this.lastEnhanceTime > this.stopAfterIdle) {
+      this.polling = false;
+      console.log('[Card Enhancer] Polling stopped (idle)');
+      return;
+    }
+
+    // Continue polling
+    setTimeout(() => requestAnimationFrame(() => this.poll()), this.pollInterval);
   }
 
   scan() {
-    if (this.scanCount >= this.maxScans) return;
+    let count = 0;
 
-    const cards = document.querySelectorAll('.s-product-card-entry');
-    const unenhanced = [];
-
-    cards.forEach(card => {
-      // Skip if already enhanced (check both WeakSet and DOM)
-      if (this.enhanced.has(card)) return;
+    // Find all product cards
+    document.querySelectorAll('.s-product-card-entry').forEach(card => {
+      // Skip if already has dots (DOM-based detection only)
       if (card.querySelector('.product-slider-dots')) return;
 
+      // Get required elements
+      const imageWrapper = card.querySelector('.s-product-card-image');
+      if (!imageWrapper) return;
+
+      const imageLink = imageWrapper.querySelector('a');
+      if (!imageLink) return;
+
+      // Extract product ID
       const productId = this.extractProductId(card);
-      if (productId) {
-        unenhanced.push({ card, productId });
-      }
+      if (!productId) return;
+
+      // Enhance this card
+      this.enhance(card, productId, imageWrapper, imageLink);
+      count++;
     });
 
-    if (unenhanced.length === 0) return;
-
-    this.scanCount++;
-
-    // Prefetch images in bulk
-    const idsToFetch = unenhanced
-      .map(c => c.productId)
-      .filter(id => !imageCache.has(id) && !pendingRequests.has(id));
-
-    if (idsToFetch.length > 0) {
-      // Chunk and fetch
-      for (let i = 0; i < idsToFetch.length; i += BULK_CHUNK_SIZE) {
-        fetchBulkImages(idsToFetch.slice(i, i + BULK_CHUNK_SIZE));
-      }
-    }
-
-    // Enhance each card
-    unenhanced.forEach(({ card, productId }) => {
-      this.enhanceCard(card, productId);
-    });
-
-    // Schedule another scan to catch any cards that appeared during enhancement
-    if (this.scanCount < this.maxScans) {
-      this.scheduleScan(150);
-    }
+    return count;
   }
 
   extractProductId(card) {
-    // Method 1: data-id
+    // data-id attribute
     if (card.dataset.id) return card.dataset.id;
 
-    // Method 2: id attribute
+    // Numeric id attribute
     if (card.id && /^\d+$/.test(card.id)) return card.id;
 
-    // Method 3: URL
+    // From URL
     const link = card.querySelector('a[href*="/product/"]');
     if (link?.href) {
       const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
       if (match) return match[1];
     }
 
-    // Method 4: product attribute
-    const productAttr = card.getAttribute('product');
-    if (productAttr) {
-      try {
-        const product = JSON.parse(productAttr);
-        if (product.id) return String(product.id);
-      } catch (e) {}
-    }
+    // From product JSON attribute
+    try {
+      const attr = card.getAttribute('product');
+      if (attr) {
+        const data = JSON.parse(attr);
+        if (data.id) return String(data.id);
+      }
+    } catch (e) {}
 
     return null;
   }
 
-  enhanceCard(card, productId) {
-    const imageWrapper = card.querySelector('.s-product-card-image');
-    if (!imageWrapper) return;
+  enhance(card, productId, imageWrapper, imageLink) {
+    // Create unique slider ID
+    const sliderId = `s${productId}-${Math.random().toString(36).substr(2, 4)}`;
 
-    // Mark as enhanced
-    this.enhanced.add(card);
+    // Add swipe indicator
+    const swipeIndicator = document.createElement('div');
+    swipeIndicator.className = 'swipe-indicator';
+    imageLink.appendChild(swipeIndicator);
 
-    // Create slider instance
-    new CardSlider(card, productId, imageWrapper);
+    // Add dots container (hidden until images load)
+    const dotsContainer = document.createElement('div');
+    dotsContainer.className = 'product-slider-dots';
+    dotsContainer.dataset.sliderId = sliderId;
+
+    for (let i = 0; i < 3; i++) {
+      const dot = document.createElement('span');
+      dot.className = 'product-slider-dot' + (i === 0 ? ' active' : '');
+      dot.dataset.index = i;
+      dotsContainer.appendChild(dot);
+    }
+
+    imageWrapper.appendChild(dotsContainer);
+
+    // Create slider controller
+    new CardSlider({
+      productId,
+      sliderId,
+      imageWrapper,
+      imageLink,
+      dotsContainer,
+      swipeIndicator
+    });
   }
 }
 
 /**
- * Individual card slider instance
+ * Individual card slider controller
  */
 class CardSlider {
-  constructor(card, productId, imageWrapper) {
-    this.card = card;
+  constructor({ productId, sliderId, imageWrapper, imageLink, dotsContainer, swipeIndicator }) {
     this.productId = productId;
+    this.sliderId = sliderId;
     this.imageWrapper = imageWrapper;
-    this.imageLink = imageWrapper.querySelector('a');
-    this.sliderId = `slider-${productId}-${Math.random().toString(36).substr(2, 6)}`;
+    this.imageLink = imageLink;
+    this.dotsContainer = dotsContainer;
+    this.swipeIndicator = swipeIndicator;
     this.currentSlide = 0;
-    this.additionalImages = [];
-    this.initialized = false;
+    this.images = [];
+    this.imagesLoaded = false;
 
-    this.setupLazyInit();
+    this.setupGestures();
+    this.setupDotClicks();
+    this.setupLazyImageLoad();
   }
 
-  setupLazyInit() {
-    const observer = new IntersectionObserver((entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting && !this.initialized) {
-          this.initialized = true;
-          observer.disconnect();
-          this.initialize();
-        }
-      });
-    }, { rootMargin: '200px', threshold: 0.01 });
-
-    observer.observe(this.imageWrapper);
-  }
-
-  async initialize() {
-    // Setup UI (dots, swipe handlers)
-    this.setupUI();
-
-    // Fetch images
-    const data = await fetchSingleImages(this.productId);
-    if (data?.images?.length) {
-      this.processImages(data.images);
-    } else {
-      this.hideDots();
-    }
-  }
-
-  setupUI() {
-    if (!this.imageLink) return;
-
-    // Swipe indicator
-    const swipeIndicator = document.createElement('div');
-    swipeIndicator.className = 'swipe-indicator';
-    this.imageLink.appendChild(swipeIndicator);
-
-    // Touch/mouse handlers
-    this.setupGestures(swipeIndicator);
-
-    // Dots
-    this.setupDots();
-  }
-
-  setupDots() {
-    const dotsContainer = document.createElement('div');
-    dotsContainer.className = 'product-slider-dots';
-    dotsContainer.dataset.sliderId = this.sliderId;
-
-    // 3 dots (main + 2 additional)
-    for (let i = 0; i < 3; i++) {
-      const dot = document.createElement('span');
-      dot.className = `product-slider-dot${i === 0 ? ' active' : ''}`;
-      dot.dataset.index = i;
+  setupDotClicks() {
+    this.dotsContainer.querySelectorAll('.product-slider-dot').forEach(dot => {
       dot.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.goToSlide(i);
+        this.goToSlide(parseInt(dot.dataset.index));
         this.haptic('light');
       });
-      dotsContainer.appendChild(dot);
-    }
-
-    this.imageWrapper.appendChild(dotsContainer);
-    this.dotsContainer = dotsContainer;
+    });
   }
 
-  setupGestures(swipeIndicator) {
-    let startX, startY, startTime, hasMoved;
+  setupGestures() {
+    let startX, startY, startTime, moved;
 
     const onStart = (x, y) => {
       startX = x;
       startY = y;
       startTime = Date.now();
-      hasMoved = false;
+      moved = false;
     };
 
     const onMove = (x, y, e) => {
-      if (startX === undefined) return;
-
+      if (startX == null) return;
       const dx = x - startX;
       const dy = y - startY;
 
       if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
-        hasMoved = true;
-        swipeIndicator.classList.toggle('right', dx > 0);
-        swipeIndicator.style.opacity = Math.min(Math.abs(dx) / 100, 0.5);
+        moved = true;
+        this.swipeIndicator.classList.toggle('right', dx > 0);
+        this.swipeIndicator.style.opacity = Math.min(Math.abs(dx) / 100, 0.5);
         e.preventDefault();
       }
     };
 
     const onEnd = (x) => {
-      if (startX === undefined) return;
+      this.swipeIndicator.style.opacity = 0;
 
-      swipeIndicator.style.opacity = 0;
-
-      if (hasMoved) {
+      if (moved && startX != null) {
         const dx = x - startX;
-        const elapsed = Date.now() - startTime;
-        const threshold = elapsed < 300 ? 30 : 50;
+        const threshold = (Date.now() - startTime) < 300 ? 30 : 50;
 
         if (Math.abs(dx) >= threshold) {
           dx > 0 ? this.prevSlide() : this.nextSlide();
@@ -441,144 +366,135 @@ class CardSlider {
         }
       }
 
-      startX = startY = undefined;
-      hasMoved = false;
+      startX = startY = null;
+      moved = false;
     };
 
-    // Touch
-    this.imageLink.addEventListener('touchstart', (e) => {
-      onStart(e.touches[0].clientX, e.touches[0].clientY);
-    }, { passive: true });
+    // Touch events
+    this.imageLink.addEventListener('touchstart', e => onStart(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
+    this.imageLink.addEventListener('touchmove', e => onMove(e.touches[0].clientX, e.touches[0].clientY, e), { passive: false });
+    this.imageLink.addEventListener('touchend', e => onEnd(e.changedTouches[0].clientX));
 
-    this.imageLink.addEventListener('touchmove', (e) => {
-      onMove(e.touches[0].clientX, e.touches[0].clientY, e);
-    }, { passive: false });
-
-    this.imageLink.addEventListener('touchend', (e) => {
-      onEnd(e.changedTouches[0].clientX);
-    });
-
-    // Mouse
+    // Mouse events
     let mouseDown = false;
-
-    this.imageLink.addEventListener('mousedown', (e) => {
-      mouseDown = true;
-      onStart(e.clientX, e.clientY);
-      e.preventDefault();
-    });
-
-    this.imageLink.addEventListener('mousemove', (e) => {
-      if (mouseDown) onMove(e.clientX, e.clientY, e);
-    });
-
-    window.addEventListener('mouseup', (e) => {
-      if (mouseDown) {
-        mouseDown = false;
-        onEnd(e.clientX);
-      }
-    });
+    this.imageLink.addEventListener('mousedown', e => { mouseDown = true; onStart(e.clientX, e.clientY); e.preventDefault(); });
+    this.imageLink.addEventListener('mousemove', e => { if (mouseDown) onMove(e.clientX, e.clientY, e); });
+    window.addEventListener('mouseup', e => { if (mouseDown) { mouseDown = false; onEnd(e.clientX); } });
   }
 
-  processImages(images) {
-    const sorted = images
+  setupLazyImageLoad() {
+    // Use IntersectionObserver to load images when card is near viewport
+    const observer = new IntersectionObserver((entries) => {
+      if (entries[0].isIntersecting && !this.imagesLoaded) {
+        this.imagesLoaded = true;
+        observer.disconnect();
+        this.loadImages();
+      }
+    }, { rootMargin: '300px' });
+
+    observer.observe(this.imageWrapper);
+  }
+
+  async loadImages() {
+    const data = await fetchImages(this.productId);
+
+    if (!data?.images?.length) {
+      this.dotsContainer.style.display = 'none';
+      return;
+    }
+
+    // Sort and take max 2 additional images
+    const sorted = data.images
       .filter(img => img?.url)
       .sort((a, b) => (a.sort || 0) - (b.sort || 0))
       .slice(0, 2);
 
     if (sorted.length === 0) {
-      this.hideDots();
+      this.dotsContainer.style.display = 'none';
       return;
     }
 
-    this.additionalImages = sorted;
+    this.images = sorted;
 
-    // Preload and add images
-    sorted.forEach((img, i) => {
-      this.addImage(img, i + 1);
+    // Add images to DOM
+    sorted.forEach((imgData, i) => {
+      const img = document.createElement('img');
+      img.className = 'product-slider-image';
+      img.dataset.index = i + 1;
+      img.alt = imgData.alt || 'Product image';
+      img.loading = 'lazy';
+      img.src = imgData.url;
+
+      img.onerror = () => {
+        img.remove();
+        const dot = this.dotsContainer.querySelector(`[data-index="${i + 1}"]`);
+        if (dot) dot.style.display = 'none';
+        this.updateDotsVisibility();
+      };
+
+      this.imageLink.appendChild(img);
     });
 
-    // Hide unused dots
+    // Hide third dot if only 1 additional image
     if (sorted.length < 2) {
-      const dot3 = this.dotsContainer?.querySelector('[data-index="2"]');
+      const dot3 = this.dotsContainer.querySelector('[data-index="2"]');
       if (dot3) dot3.style.display = 'none';
+    }
+
+    // Show dots
+    this.dotsContainer.classList.add('has-images');
+  }
+
+  updateDotsVisibility() {
+    const visibleDots = this.dotsContainer.querySelectorAll('.product-slider-dot:not([style*="display: none"])');
+    if (visibleDots.length <= 1) {
+      this.dotsContainer.classList.remove('has-images');
     }
   }
 
-  addImage(imgData, index) {
-    if (!this.imageLink) return;
-
-    const img = document.createElement('img');
-    img.className = 'product-slider-image';
-    img.dataset.sliderId = this.sliderId;
-    img.dataset.index = index;
-    img.alt = imgData.alt || 'Product image';
-    img.loading = 'lazy';
-    img.src = imgData.url;
-
-    img.onerror = () => {
-      img.remove();
-      const dot = this.dotsContainer?.querySelector(`[data-index="${index}"]`);
-      if (dot) dot.style.display = 'none';
-    };
-
-    this.imageLink.appendChild(img);
-  }
-
   goToSlide(index) {
+    if (!this.images.length && index > 0) return;
+
     this.currentSlide = index;
 
     // Update dots
-    this.dotsContainer?.querySelectorAll('.product-slider-dot').forEach((dot, i) => {
+    this.dotsContainer.querySelectorAll('.product-slider-dot').forEach((dot, i) => {
       dot.classList.toggle('active', i === index);
     });
 
-    // Get elements
-    const mainImg = this.imageLink?.querySelector('img:not(.product-slider-image)');
-    const sliderImgs = this.imageLink?.querySelectorAll('.product-slider-image');
+    // Get main image (first img that's not a slider image)
+    const mainImg = this.imageLink.querySelector('img:not(.product-slider-image)');
+    const sliderImgs = this.imageLink.querySelectorAll('.product-slider-image');
 
     if (index === 0) {
       // Show main image
-      if (mainImg) {
-        mainImg.style.cssText = 'visibility:visible;opacity:1;z-index:10;';
-      }
-      sliderImgs?.forEach(img => img.classList.remove('active'));
+      if (mainImg) mainImg.style.cssText = 'visibility:visible;opacity:1;z-index:10;';
+      sliderImgs.forEach(img => img.classList.remove('active'));
     } else {
-      // Hide main, show slider image
-      if (mainImg) {
-        mainImg.style.cssText = 'visibility:hidden;opacity:0;z-index:5;';
-      }
-      sliderImgs?.forEach(img => {
+      // Hide main, show selected slider image
+      if (mainImg) mainImg.style.cssText = 'visibility:hidden;opacity:0;z-index:5;';
+      sliderImgs.forEach(img => {
         img.classList.toggle('active', parseInt(img.dataset.index) === index);
       });
     }
   }
 
   prevSlide() {
-    const total = this.additionalImages.length + 1;
+    const total = this.images.length + 1;
     this.goToSlide((this.currentSlide - 1 + total) % total);
   }
 
   nextSlide() {
-    const total = this.additionalImages.length + 1;
+    const total = this.images.length + 1;
     this.goToSlide((this.currentSlide + 1) % total);
   }
 
-  hideDots() {
-    if (this.dotsContainer) {
-      this.dotsContainer.style.display = 'none';
-    }
-  }
-
-  haptic(intensity) {
+  haptic(type) {
     try {
-      if (navigator.vibrate) {
-        navigator.vibrate(intensity === 'light' ? 10 : 25);
-      }
+      navigator.vibrate?.(type === 'light' ? 10 : 25);
     } catch (e) {}
   }
 }
 
-// Auto-initialize
-const enhancer = new ProductCardEnhancer();
-
-export default enhancer;
+// Initialize
+new ProductCardEnhancer();
