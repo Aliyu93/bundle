@@ -331,13 +331,18 @@ class CardSlider {
   }
 
   setupGestures() {
-    let startX, startY, startTime, moved;
+    let startX, startY, startTime;
+    let isOurSwipe = false; // We've claimed this as our horizontal swipe
+    let directionDecided = false; // We've determined swipe direction
 
-    const onStart = (x, y) => {
+    const onStart = (x, y, e) => {
       startX = x;
       startY = y;
       startTime = Date.now();
-      moved = false;
+      isOurSwipe = false;
+      directionDecided = false;
+      // Stop propagation on start to prevent Swiper from initiating
+      e.stopPropagation();
     };
 
     const onMove = (x, y, e) => {
@@ -345,18 +350,28 @@ class CardSlider {
       const dx = x - startX;
       const dy = y - startY;
 
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
-        moved = true;
+      // First significant movement - decide who owns this gesture
+      if (!directionDecided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+        directionDecided = true;
+        // Horizontal swipe = ours (image slider)
+        // Vertical swipe = not ours (page scroll / let Swiper handle)
+        isOurSwipe = Math.abs(dx) > Math.abs(dy);
+      }
+
+      if (isOurSwipe) {
+        // We own this gesture - STOP PROPAGATION to prevent Swiper
+        e.stopPropagation();
+        e.preventDefault();
+
         this.swipeIndicator.classList.toggle('right', dx > 0);
         this.swipeIndicator.style.opacity = Math.min(Math.abs(dx) / 100, 0.5);
-        e.preventDefault();
       }
     };
 
-    const onEnd = (x) => {
+    const onEnd = (x, e) => {
       this.swipeIndicator.style.opacity = 0;
 
-      if (moved && startX != null) {
+      if (isOurSwipe && startX != null) {
         const dx = x - startX;
         const threshold = (Date.now() - startTime) < 300 ? 30 : 50;
 
@@ -364,22 +379,49 @@ class CardSlider {
           dx > 0 ? this.prevSlide() : this.nextSlide();
           this.haptic('medium');
         }
+
+        // Stop propagation on end too
+        e.stopPropagation();
+        e.preventDefault();
       }
 
       startX = startY = null;
-      moved = false;
+      isOurSwipe = false;
+      directionDecided = false;
     };
 
-    // Touch events
-    this.imageLink.addEventListener('touchstart', e => onStart(e.touches[0].clientX, e.touches[0].clientY), { passive: true });
-    this.imageLink.addEventListener('touchmove', e => onMove(e.touches[0].clientX, e.touches[0].clientY, e), { passive: false });
-    this.imageLink.addEventListener('touchend', e => onEnd(e.changedTouches[0].clientX));
+    // Touch events - capture phase to intercept before Swiper
+    this.imageLink.addEventListener('touchstart', e => {
+      onStart(e.touches[0].clientX, e.touches[0].clientY, e);
+    }, { passive: false, capture: true });
+
+    this.imageLink.addEventListener('touchmove', e => {
+      onMove(e.touches[0].clientX, e.touches[0].clientY, e);
+    }, { passive: false, capture: true });
+
+    this.imageLink.addEventListener('touchend', e => {
+      onEnd(e.changedTouches[0].clientX, e);
+    }, { passive: false, capture: true });
 
     // Mouse events
     let mouseDown = false;
-    this.imageLink.addEventListener('mousedown', e => { mouseDown = true; onStart(e.clientX, e.clientY); e.preventDefault(); });
-    this.imageLink.addEventListener('mousemove', e => { if (mouseDown) onMove(e.clientX, e.clientY, e); });
-    window.addEventListener('mouseup', e => { if (mouseDown) { mouseDown = false; onEnd(e.clientX); } });
+    this.imageLink.addEventListener('mousedown', e => {
+      mouseDown = true;
+      onStart(e.clientX, e.clientY, e);
+      e.preventDefault();
+      e.stopPropagation();
+    }, { capture: true });
+
+    this.imageLink.addEventListener('mousemove', e => {
+      if (mouseDown) onMove(e.clientX, e.clientY, e);
+    }, { capture: true });
+
+    window.addEventListener('mouseup', e => {
+      if (mouseDown) {
+        mouseDown = false;
+        onEnd(e.clientX, e);
+      }
+    });
   }
 
   setupLazyImageLoad() {
