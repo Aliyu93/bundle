@@ -33,10 +33,15 @@ class CartAddonsSlider extends HTMLElement {
     ensureStructure() {
         if (this.structureReady) return;
 
-        if (!this.querySelector('.cart-addons-title')) {
+        const titleText = this.getTitleText();
+        const existingTitle = this.querySelector('.cart-addons-title');
+
+        if (existingTitle) {
+            existingTitle.textContent = titleText;
+        } else {
             const title = document.createElement('h3');
             title.className = 'cart-addons-title';
-            title.textContent = window.salla?.lang?.get('pages.cart.frequently_bought_together') || 'Frequently bought together';
+            title.textContent = titleText;
             this.appendChild(title);
         }
 
@@ -47,6 +52,27 @@ class CartAddonsSlider extends HTMLElement {
         }
 
         this.structureReady = true;
+    }
+
+    getTitleText() {
+        const translationKey = 'pages.cart.frequently_bought_together';
+        const localizedTitle = window.salla?.lang?.get?.(translationKey);
+        const cleanedLocalizedTitle =
+            typeof localizedTitle === 'string' && localizedTitle !== translationKey
+                ? localizedTitle.trim()
+                : '';
+
+        if (cleanedLocalizedTitle) {
+            return cleanedLocalizedTitle;
+        }
+
+        const language = (document.documentElement.getAttribute('lang') || '').toLowerCase().slice(0, 2);
+        const fallbackTitles = {
+            ar: '\u0645\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643',
+            en: 'Frequently Bought Together'
+        };
+
+        return fallbackTitles[language] || fallbackTitles.en;
     }
 
     async getHighestValueItemFromDOM() {
