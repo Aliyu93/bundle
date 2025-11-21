@@ -1,298 +1,301 @@
 /**
- * Product Card Image Slider Auto-Enhancer
- * Extends stock Salla product cards with multi-image slider functionality
- * Works with ALL product cards site-wide (Algolia + native Salla renders)
+ * Product Card Image Slider Enhancer
+ * Adds multi-image slider (3 images) to Salla product cards
+ * Robust timing: handles async rendering with multi-pass scanning
  */
 
-// Inject slider styles once on load
-const injectProductSliderStyles = () => {
-  if (document.getElementById('product-slider-styles')) return;
+const IMAGE_API_BASE = 'https://productstoredis-163858290861.me-central2.run.app/product-images';
+const BULK_CHUNK_SIZE = 50;
 
+// Caches
+const imageCache = new Map();
+const pendingRequests = new Map();
+
+// Styles
+const SLIDER_STYLES = `
+.product-slider-dots {
+  position: absolute;
+  bottom: 10px;
+  left: 0;
+  right: 0;
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  z-index: 50;
+}
+.product-slider-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.5);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+.product-slider-dot.active {
+  background: white;
+  width: 12px;
+  border-radius: 4px;
+}
+.product-slider-image {
+  position: absolute !important;
+  top: 0;
+  left: 0;
+  width: 100% !important;
+  height: 100% !important;
+  object-fit: cover;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.3s ease, visibility 0.3s ease;
+  z-index: 5;
+  display: block;
+}
+.product-slider-image.active {
+  opacity: 1;
+  visibility: visible;
+  z-index: 10;
+}
+.s-product-card-image {
+  position: relative !important;
+  overflow: hidden;
+}
+.s-product-card-image > a {
+  position: relative !important;
+  display: block;
+}
+.swipe-indicator {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 50%);
+  opacity: 0;
+  z-index: 15;
+  transition: opacity 0.2s ease;
+  pointer-events: none;
+}
+.swipe-indicator.right {
+  background: linear-gradient(270deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 50%);
+}
+`;
+
+function injectStyles() {
+  if (document.getElementById('product-slider-enhancer-styles')) return;
   const style = document.createElement('style');
-  style.id = 'product-slider-styles';
-  style.textContent = `
-    .product-slider-dots {
-      position: absolute;
-      bottom: 10px;
-      left: 0;
-      right: 0;
-      display: flex;
-      justify-content: center;
-      gap: 6px;
-      z-index: 50;
-    }
-    .product-slider-dot {
-      width: 8px;
-      height: 8px;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.5);
-      cursor: pointer;
-      transition: all 0.3s ease;
-      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
-    }
-    .product-slider-dot.active {
-      background: white;
-      width: 12px;
-      border-radius: 4px;
-    }
-    .product-slider-image {
-      position: absolute !important;
-      top: 0;
-      left: 0;
-      width: 100% !important;
-      height: 100% !important;
-      object-fit: cover;
-      opacity: 0;
-      visibility: hidden;
-      transition: opacity 0.3s ease, visibility 0.3s ease;
-      z-index: 5;
-      display: block;
-      line-height: 0;
-    }
-    .product-slider-image.active {
-      opacity: 1;
-      visibility: visible;
-      z-index: 10;
-    }
-    .s-product-card-image {
-      position: relative !important;
-      overflow: visible;
-    }
-    .s-product-card-image > a {
-      position: relative !important;
-      display: block;
-      line-height: 0;
-    }
-    .s-product-card-image img {
-      display: block;
-      line-height: 0;
-    }
-    .swipe-indicator {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 50%);
-      opacity: 0;
-      z-index: 15;
-      transition: opacity 0.2s ease;
-      pointer-events: none;
-    }
-    .swipe-indicator.right {
-      background: linear-gradient(270deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 50%);
-    }
-  `;
+  style.id = 'product-slider-enhancer-styles';
+  style.textContent = SLIDER_STYLES;
   document.head.appendChild(style);
-};
+}
 
-// Simple caches to avoid redundant fetches and support bulk hydration
-const imageResponseCache = new Map(); // productId -> { images, main_image? }
-const inflightImageRequests = new Map(); // productId -> Promise
-const pendingBulkIds = new Set();
-const IMAGE_REQUEST_BASE = 'https://productstoredis-163858290861.me-central2.run.app/product-images';
-const BULK_CHUNK_SIZE = 100;
-const BULK_RETRY_MAX = 1;
-const BULK_RETRY_MIN_DELAY = 200;
-const BULK_RETRY_MAX_DELAY = 400;
-const PENDING_GRACE_MS = 400;
+/**
+ * Fetch images for multiple products in one request
+ */
+async function fetchBulkImages(productIds) {
+  if (!productIds.length) return {};
 
-const chunkArray = (arr, size) => {
-  const chunks = [];
-  for (let i = 0; i < arr.length; i += size) {
-    chunks.push(arr.slice(i, i + size));
-  }
-  return chunks;
-};
-
-async function fetchBulkProductImages(productIds) {
-  if (!productIds || productIds.length === 0) return {};
-  const url = `${IMAGE_REQUEST_BASE}?ids=${encodeURIComponent(productIds.join(','))}`;
+  const url = `${IMAGE_API_BASE}?ids=${productIds.join(',')}`;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort('timeout'), 5000);
+  const timeout = setTimeout(() => controller.abort(), 5000);
+
   try {
     const res = await fetch(url, { signal: controller.signal });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-    return await res.json();
+    const data = await res.json();
+
+    // Cache results
+    Object.entries(data).forEach(([id, imgData]) => {
+      if (imgData?.images) imageCache.set(String(id), imgData);
+    });
+
+    return data;
+  } catch (e) {
+    console.warn('[Card Enhancer] Bulk fetch failed:', e.message);
+    return {};
   } finally {
     clearTimeout(timeout);
   }
 }
 
+/**
+ * Fetch images for a single product
+ */
+async function fetchSingleImages(productId) {
+  if (imageCache.has(productId)) {
+    return imageCache.get(productId);
+  }
+
+  if (pendingRequests.has(productId)) {
+    return pendingRequests.get(productId);
+  }
+
+  const promise = (async () => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+
+    try {
+      const res = await fetch(`${IMAGE_API_BASE}/${productId}`, { signal: controller.signal });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      imageCache.set(productId, data);
+      return data;
+    } catch (e) {
+      return null;
+    } finally {
+      clearTimeout(timeout);
+      pendingRequests.delete(productId);
+    }
+  })();
+
+  pendingRequests.set(productId, promise);
+  return promise;
+}
+
+/**
+ * Main enhancer class
+ */
 class ProductCardEnhancer {
   constructor() {
-    this.enhancedCards = new WeakSet();
+    this.enhanced = new WeakSet();
+    this.scanPending = false;
+    this.scanCount = 0;
+    this.maxScans = 30;
     this.init();
   }
 
   init() {
-    // Inject styles once
-    injectProductSliderStyles();
+    injectStyles();
 
-    // Wait for Salla to be ready
-    if (window.app?.status === 'ready') {
-      this.setupEventListeners();
-      this.enhanceExistingCards();
-    } else {
-      document.addEventListener('theme::ready', () => {
-        this.setupEventListeners();
-        this.enhanceExistingCards();
-      });
-    }
-  }
+    // Scan immediately
+    this.scheduleScan(0);
 
-  setupEventListeners() {
-    // Listen for Salla product rendering events
-    document.addEventListener('salla-products-slider::products.fetched', (e) => {
-      console.log('[Product Card Enhancer] Products slider fetched');
-      setTimeout(() => this.enhanceExistingCards(), 100);
-      this.schedulePrefetch(e.target);
-    });
-
-    document.addEventListener('salla-products-list::products.fetched', (e) => {
-      console.log('[Product Card Enhancer] Products list fetched');
-      setTimeout(() => this.enhanceExistingCards(), 100);
-      this.schedulePrefetch(e.target);
-    });
-
-    // Listen for page changes (SPA navigation)
-    document.addEventListener('salla::page::changed', () => {
-      console.log('[Product Card Enhancer] Page changed');
-      setTimeout(() => this.enhanceExistingCards(), 500);
-    });
-
-    // MutationObserver as fallback for dynamically added cards
-    this.setupMutationObserver();
-  }
-
-  schedulePrefetch(target) {
-    clearTimeout(this._prefetchTimer);
-    this._prefetchTimer = setTimeout(() => this.prefetchProductImagesFromList(target), 75);
-  }
-
-  prefetchProductImagesFromList(target) {
-    const lists = [];
-    if (target?.matches?.('salla-products-list')) {
-      lists.push(target);
-    } else {
-      document.querySelectorAll('salla-products-list').forEach(l => lists.push(l));
+    // Scan on DOMContentLoaded
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', () => this.scheduleScan(0));
     }
 
-    const ids = new Set();
-    lists.forEach(list => {
-      const sourceValue = list.getAttribute('source-value');
-      if (sourceValue) {
-        try {
-          const parsed = JSON.parse(sourceValue);
-          if (Array.isArray(parsed)) {
-            parsed.forEach(id => ids.add(String(id)));
-          }
-        } catch (e) {}
-      }
+    // Scan on window load
+    window.addEventListener('load', () => {
+      this.scheduleScan(100);
+      this.scheduleScan(500);
+    });
 
-      // fallback scrape if list lacks source-value
-      list.querySelectorAll('.s-product-card-entry').forEach(card => {
-        const id = this.extractProductId(card);
-        if (id) ids.add(String(id));
+    // Salla events - scan with multiple delays to catch async renders
+    const sallaEvents = [
+      'salla-products-slider::products.fetched',
+      'salla-products-list::products.fetched',
+      'salla::page::changed',
+      'theme::ready'
+    ];
+
+    sallaEvents.forEach(event => {
+      document.addEventListener(event, () => {
+        this.scanCount = 0; // Reset scan count on new content
+        this.scheduleScan(50);
+        this.scheduleScan(200);
+        this.scheduleScan(500);
       });
     });
 
-    const idsToFetch = Array.from(ids)
-      .filter(id => !imageResponseCache.has(id) && !pendingBulkIds.has(id));
-    if (!idsToFetch.length) return;
+    // MutationObserver for dynamic content
+    this.setupObserver();
 
-    const chunks = chunkArray(idsToFetch, BULK_CHUNK_SIZE);
-
-    const runChunk = (chunk, attempt = 0) => {
-      chunk.forEach(id => pendingBulkIds.add(id));
-      fetchBulkProductImages(chunk)
-        .then(payload => {
-          if (!payload || typeof payload !== 'object') return;
-          Object.entries(payload).forEach(([pid, data]) => {
-            if (data && data.images) {
-              imageResponseCache.set(String(pid), data);
-            }
-          });
-        })
-        .catch(err => {
-          console.warn('[Product Card Enhancer] Bulk fetch failed', err);
-          if (attempt < BULK_RETRY_MAX) {
-            const delay = Math.floor(Math.random() * (BULK_RETRY_MAX_DELAY - BULK_RETRY_MIN_DELAY + 1)) + BULK_RETRY_MIN_DELAY;
-            setTimeout(() => runChunk(chunk, attempt + 1), delay);
-          }
-        })
-        .finally(() => {
-          // If a retry is scheduled, pending will be re-added; if not, allow fallback
-          chunk.forEach(id => pendingBulkIds.delete(id));
-        });
-    };
-
-    chunks.forEach(chunk => runChunk(chunk));
+    console.log('[Card Enhancer] Initialized');
   }
 
-  setupMutationObserver() {
+  setupObserver() {
     const observer = new MutationObserver((mutations) => {
-      let hasNewCards = false;
+      let hasNewContent = false;
 
       for (const mutation of mutations) {
-        if (mutation.addedNodes.length > 0) {
-          for (const node of mutation.addedNodes) {
-            if (node.nodeType === 1) { // Element node
-              if (node.classList?.contains('s-product-card-entry') ||
-                  node.querySelector?.('.s-product-card-entry')) {
-                hasNewCards = true;
-                break;
-              }
+        for (const node of mutation.addedNodes) {
+          if (node.nodeType === Node.ELEMENT_NODE) {
+            if (node.classList?.contains('s-product-card-entry') ||
+                node.classList?.contains('s-products-list-wrapper') ||
+                node.querySelector?.('.s-product-card-entry')) {
+              hasNewContent = true;
+              break;
             }
           }
         }
-        if (hasNewCards) break;
+        if (hasNewContent) break;
       }
 
-      if (hasNewCards) {
-        setTimeout(() => this.enhanceExistingCards(), 50);
+      if (hasNewContent) {
+        this.scanCount = 0;
+        this.scheduleScan(10);
+        this.scheduleScan(100);
       }
     });
 
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
+    observer.observe(document.body, { childList: true, subtree: true });
   }
 
-  enhanceExistingCards() {
+  scheduleScan(delay = 0) {
+    setTimeout(() => {
+      requestAnimationFrame(() => this.scan());
+    }, delay);
+  }
+
+  scan() {
+    if (this.scanCount >= this.maxScans) return;
+
     const cards = document.querySelectorAll('.s-product-card-entry');
-    console.log(`[Product Card Enhancer] Found ${cards.length} product cards`);
+    const unenhanced = [];
 
     cards.forEach(card => {
+      // Skip if already enhanced (check both WeakSet and DOM)
+      if (this.enhanced.has(card)) return;
+      if (card.querySelector('.product-slider-dots')) return;
+
       const productId = this.extractProductId(card);
-      if (productId && !this.enhancedCards.has(card)) {
-        this.enhanceCard(card, productId);
+      if (productId) {
+        unenhanced.push({ card, productId });
       }
     });
+
+    if (unenhanced.length === 0) return;
+
+    this.scanCount++;
+
+    // Prefetch images in bulk
+    const idsToFetch = unenhanced
+      .map(c => c.productId)
+      .filter(id => !imageCache.has(id) && !pendingRequests.has(id));
+
+    if (idsToFetch.length > 0) {
+      // Chunk and fetch
+      for (let i = 0; i < idsToFetch.length; i += BULK_CHUNK_SIZE) {
+        fetchBulkImages(idsToFetch.slice(i, i + BULK_CHUNK_SIZE));
+      }
+    }
+
+    // Enhance each card
+    unenhanced.forEach(({ card, productId }) => {
+      this.enhanceCard(card, productId);
+    });
+
+    // Schedule another scan to catch any cards that appeared during enhancement
+    if (this.scanCount < this.maxScans) {
+      this.scheduleScan(150);
+    }
   }
 
   extractProductId(card) {
-    // Try multiple methods to extract product ID
-
-    // Method 1: data-id attribute
-    if (card.dataset.id) {
-      return card.dataset.id;
-    }
+    // Method 1: data-id
+    if (card.dataset.id) return card.dataset.id;
 
     // Method 2: id attribute
-    if (card.id && !isNaN(card.id)) {
-      return card.id;
-    }
+    if (card.id && /^\d+$/.test(card.id)) return card.id;
 
-    // Method 3: Extract from product link URL
-    const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a');
+    // Method 3: URL
+    const link = card.querySelector('a[href*="/product/"]');
     if (link?.href) {
       const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
       if (match) return match[1];
     }
 
-    // Method 4: Look for product data in attributes
+    // Method 4: product attribute
     const productAttr = card.getAttribute('product');
     if (productAttr) {
       try {
@@ -305,505 +308,277 @@ class ProductCardEnhancer {
   }
 
   enhanceCard(card, productId) {
-    console.log(`[Product Card Enhancer] Enhancing card for product ${productId}`);
-
     const imageWrapper = card.querySelector('.s-product-card-image');
-    if (!imageWrapper) {
-      console.warn(`[Product Card Enhancer] No image wrapper found for product ${productId}`);
-      return;
-    }
+    if (!imageWrapper) return;
 
-    // Create instance for this card
-    const instance = new CardSliderInstance(card, productId, imageWrapper);
-    this.enhancedCards.add(card);
+    // Mark as enhanced
+    this.enhanced.add(card);
 
-    // Setup lazy initialization when card comes into view
-    instance.setupLazyInit();
+    // Create slider instance
+    new CardSlider(card, productId, imageWrapper);
   }
 }
 
-class CardSliderInstance {
+/**
+ * Individual card slider instance
+ */
+class CardSlider {
   constructor(card, productId, imageWrapper) {
     this.card = card;
     this.productId = productId;
     this.imageWrapper = imageWrapper;
-    this.imageContainer = imageWrapper.querySelector('a');
+    this.imageLink = imageWrapper.querySelector('a');
+    this.sliderId = `slider-${productId}-${Math.random().toString(36).substr(2, 6)}`;
     this.currentSlide = 0;
     this.additionalImages = [];
-    this.touchStartX = 0;
-    this.touchEndX = 0;
-    this.isSwiping = false;
-    this.isMouseDown = false;
-    this.sliderInitialized = false;
-    this.sliderId = `slider-${productId}-${Date.now()}`;
-    this.boundEventHandlers = {};
-    this._maxInitRetries = 5;
-  }
+    this.initialized = false;
 
-  getImageContainer() {
-    if (this.imageContainer && this.imageContainer.isConnected) {
-      return this.imageContainer;
-    }
-
-    if (!this.imageWrapper?.isConnected) {
-      this.imageWrapper = this.card.querySelector('.s-product-card-image');
-    }
-
-    this.imageContainer = this.imageWrapper?.querySelector('a') || null;
-    return this.imageContainer;
+    this.setupLazyInit();
   }
 
   setupLazyInit() {
-    if (!this.imageWrapper) return;
-
-    this._observer = new IntersectionObserver(entries => {
+    const observer = new IntersectionObserver((entries) => {
       entries.forEach(entry => {
-        if (entry.isIntersecting && !this.sliderInitialized) {
-          this.sliderInitialized = true;
-
-          // Setup slider UI
-          this.setupImageSlider();
-
-          // Fetch additional images from Redis
-          setTimeout(() => {
-            this.fetchProductImages();
-          }, 50);
-
-          // Unobserve after initialization
-          this._observer.unobserve(entry.target);
+        if (entry.isIntersecting && !this.initialized) {
+          this.initialized = true;
+          observer.disconnect();
+          this.initialize();
         }
       });
-    }, {
-      rootMargin: '300px',
-      threshold: 0.01
-    });
+    }, { rootMargin: '200px', threshold: 0.01 });
 
-    this._observer.observe(this.imageWrapper);
+    observer.observe(this.imageWrapper);
   }
 
-  setupImageSlider(retryCount = 0) {
-    const imageContainer = this.getImageContainer();
-    if (!imageContainer) {
-      if (retryCount < this._maxInitRetries) {
-        setTimeout(() => this.setupImageSlider(retryCount + 1), 100);
-      } else {
-        console.warn(`[Product Card Enhancer] Image link missing for product ${this.productId}`);
-      }
-      return;
+  async initialize() {
+    // Setup UI (dots, swipe handlers)
+    this.setupUI();
+
+    // Fetch images
+    const data = await fetchSingleImages(this.productId);
+    if (data?.images?.length) {
+      this.processImages(data.images);
+    } else {
+      this.hideDots();
     }
+  }
 
-    this.imageContainer = imageContainer;
+  setupUI() {
+    if (!this.imageLink) return;
 
-    // Add swipe indicator
+    // Swipe indicator
     const swipeIndicator = document.createElement('div');
     swipeIndicator.className = 'swipe-indicator';
-    imageContainer.appendChild(swipeIndicator);
+    this.imageLink.appendChild(swipeIndicator);
 
-    // Setup touch/swipe handlers
-    let startX = null;
-    let startY = null;
-    let startTime = null;
-    let hasMoved = false;
+    // Touch/mouse handlers
+    this.setupGestures(swipeIndicator);
 
-    this.boundEventHandlers.touchstart = (e) => {
-      startX = e.touches[0].clientX;
-      startY = e.touches[0].clientY;
-      startTime = Date.now();
-      hasMoved = false;
-    };
+    // Dots
+    this.setupDots();
+  }
 
-    this.boundEventHandlers.touchmove = (e) => {
-      if (!startX) return;
-
-      const moveX = e.touches[0].clientX - startX;
-      const moveY = e.touches[0].clientY - startY;
-
-      // Only handle horizontal swipes
-      if (Math.abs(moveX) > Math.abs(moveY) && Math.abs(moveX) > 10) {
-        hasMoved = true;
-        this.isSwiping = true;
-
-        swipeIndicator.classList.toggle('right', moveX > 0);
-        swipeIndicator.style.opacity = Math.min(Math.abs(moveX) / 100, 0.5);
-
-        e.preventDefault();
-      }
-    };
-
-    this.boundEventHandlers.touchend = (e) => {
-      if (!startX || !hasMoved) {
-        startX = startY = null;
-        this.isSwiping = false;
-        swipeIndicator.style.opacity = 0;
-        return;
-      }
-
-      if (this.isSwiping) {
-        const endX = e.changedTouches[0].clientX;
-        const moveX = endX - startX;
-        const elapsedTime = Date.now() - startTime;
-
-        const minSwipeDistance = elapsedTime < 300 ? 30 : 50;
-
-        if (Math.abs(moveX) >= minSwipeDistance) {
-          if (moveX > 0) {
-            this.prevSlide();
-            this.triggerHapticFeedback('medium');
-          } else {
-            this.nextSlide();
-            this.triggerHapticFeedback('medium');
-          }
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-      }
-
-      swipeIndicator.style.opacity = 0;
-      startX = startY = null;
-      this.isSwiping = false;
-    };
-
-    imageContainer.addEventListener('touchstart', this.boundEventHandlers.touchstart, {passive: true});
-    imageContainer.addEventListener('touchmove', this.boundEventHandlers.touchmove, {passive: false});
-    imageContainer.addEventListener('touchend', this.boundEventHandlers.touchend, {passive: false});
-
-    // Setup mouse handlers (desktop drag)
-    this.boundEventHandlers.mousedown = (e) => {
-      this.isMouseDown = true;
-      startX = e.clientX;
-      startY = e.clientY;
-      startTime = Date.now();
-      hasMoved = false;
-      e.preventDefault();
-      e.stopPropagation();
-    };
-
-    this.boundEventHandlers.mousemove = (e) => {
-      if (!this.isMouseDown || !startX) return;
-
-      const moveX = e.clientX - startX;
-
-      if (Math.abs(moveX) > 10) {
-        hasMoved = true;
-        this.isSwiping = true;
-
-        swipeIndicator.classList.toggle('right', moveX > 0);
-        swipeIndicator.style.opacity = Math.min(Math.abs(moveX) / 100, 0.5);
-      }
-
-      if (this.isSwiping) {
-        e.preventDefault();
-        e.stopPropagation();
-      }
-    };
-
-    this.boundEventHandlers.mouseup = (e) => {
-      if (!this.isMouseDown) return;
-
-      if (hasMoved && this.isSwiping) {
-        const endX = e.clientX;
-        const moveX = endX - startX;
-        const elapsedTime = Date.now() - startTime;
-
-        const minSwipeDistance = elapsedTime < 300 ? 30 : 50;
-
-        if (Math.abs(moveX) >= minSwipeDistance) {
-          if (moveX > 0) {
-            this.prevSlide();
-          } else {
-            this.nextSlide();
-          }
-        }
-
-        e.preventDefault();
-        e.stopPropagation();
-      }
-
-      swipeIndicator.style.opacity = 0;
-      this.isMouseDown = false;
-      this.isSwiping = false;
-      startX = startY = null;
-    };
-
-    imageContainer.addEventListener('mousedown', this.boundEventHandlers.mousedown);
-    imageContainer.addEventListener('mousemove', this.boundEventHandlers.mousemove);
-    window.addEventListener('mouseup', this.boundEventHandlers.mouseup);
-
-    // Setup dots (initially with just the main image dot)
+  setupDots() {
     const dotsContainer = document.createElement('div');
     dotsContainer.className = 'product-slider-dots';
     dotsContainer.dataset.sliderId = this.sliderId;
-    dotsContainer.dataset.productId = this.productId;
 
-    const firstDot = document.createElement('span');
-    firstDot.className = 'product-slider-dot active';
-    firstDot.dataset.sliderId = this.sliderId;
-    firstDot.dataset.productId = this.productId;
-    firstDot.dataset.index = '0';
-    firstDot.addEventListener('click', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      this.changeSlide(0);
-      this.triggerHapticFeedback('light');
-    });
-    dotsContainer.appendChild(firstDot);
-
-    // Add 2 placeholder dots for additional images
-    for (let i = 0; i < 2; i++) {
+    // 3 dots (main + 2 additional)
+    for (let i = 0; i < 3; i++) {
       const dot = document.createElement('span');
-      dot.className = 'product-slider-dot';
-      dot.dataset.sliderId = this.sliderId;
-      dot.dataset.productId = this.productId;
-      dot.dataset.index = String(i + 1);
+      dot.className = `product-slider-dot${i === 0 ? ' active' : ''}`;
+      dot.dataset.index = i;
       dot.addEventListener('click', (e) => {
         e.preventDefault();
         e.stopPropagation();
-        this.changeSlide(i + 1);
-        this.triggerHapticFeedback('light');
+        this.goToSlide(i);
+        this.haptic('light');
       });
       dotsContainer.appendChild(dot);
     }
 
     this.imageWrapper.appendChild(dotsContainer);
+    this.dotsContainer = dotsContainer;
   }
 
-  fetchProductImages() {
-    if (!this.productId) return;
+  setupGestures(swipeIndicator) {
+    let startX, startY, startTime, hasMoved;
 
-    // Serve from cache if already prefetched
-    if (imageResponseCache.has(this.productId)) {
-      this.processImageResponse(imageResponseCache.get(this.productId));
-      return;
-    }
+    const onStart = (x, y) => {
+      startX = x;
+      startY = y;
+      startTime = Date.now();
+      hasMoved = false;
+    };
 
-    // If a bulk request is already pending for this ID, wait briefly before falling back
-    if (pendingBulkIds.has(this.productId)) {
-      setTimeout(() => {
-        if (imageResponseCache.has(this.productId)) {
-          this.processImageResponse(imageResponseCache.get(this.productId));
-          return;
-        }
-        if (pendingBulkIds.has(this.productId)) {
-          // Bulk still pending; proceed with single fetch as fallback
-          this.performSingleFetch();
-        }
-      }, PENDING_GRACE_MS);
-      return;
-    }
+    const onMove = (x, y, e) => {
+      if (startX === undefined) return;
 
-    this.performSingleFetch();
-  }
+      const dx = x - startX;
+      const dy = y - startY;
 
-  performSingleFetch() {
-    if (!this.productId) return;
-
-    const requestUrl = `${IMAGE_REQUEST_BASE}/${this.productId}`;
-
-    // de-dupe per product.
-    if (inflightImageRequests.has(this.productId)) {
-      inflightImageRequests.get(this.productId)
-        .then(data => this.processImageResponse(data))
-        .catch(() => this.hideDots());
-      return;
-    }
-
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort('timeout'), 5000);
-    const p = fetch(requestUrl, { signal: controller.signal })
-      .then(res => {
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        return res.json();
-      })
-      .then(data => {
-        imageResponseCache.set(this.productId, data);
-        this.processImageResponse(data);
-      })
-      .catch(error => {
-        console.warn(`[Product Card Enhancer] Failed to fetch images for product ${this.productId}:`, error);
-        this.hideDots();
-      })
-      .finally(() => {
-        clearTimeout(timeoutId);
-        inflightImageRequests.delete(this.productId);
-      });
-
-    inflightImageRequests.set(this.productId, p);
-  }
-
-  processImageResponse(data) {
-    if (!data?.images || !Array.isArray(data.images)) {
-      const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
-      if (dotsContainer) {
-        dotsContainer.style.display = 'none';
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 10) {
+        hasMoved = true;
+        swipeIndicator.classList.toggle('right', dx > 0);
+        swipeIndicator.style.opacity = Math.min(Math.abs(dx) / 100, 0.5);
+        e.preventDefault();
       }
-      return;
-    }
+    };
 
-    const additionalImages = data.images
-      .filter(img => img && img.url)
+    const onEnd = (x) => {
+      if (startX === undefined) return;
+
+      swipeIndicator.style.opacity = 0;
+
+      if (hasMoved) {
+        const dx = x - startX;
+        const elapsed = Date.now() - startTime;
+        const threshold = elapsed < 300 ? 30 : 50;
+
+        if (Math.abs(dx) >= threshold) {
+          dx > 0 ? this.prevSlide() : this.nextSlide();
+          this.haptic('medium');
+        }
+      }
+
+      startX = startY = undefined;
+      hasMoved = false;
+    };
+
+    // Touch
+    this.imageLink.addEventListener('touchstart', (e) => {
+      onStart(e.touches[0].clientX, e.touches[0].clientY);
+    }, { passive: true });
+
+    this.imageLink.addEventListener('touchmove', (e) => {
+      onMove(e.touches[0].clientX, e.touches[0].clientY, e);
+    }, { passive: false });
+
+    this.imageLink.addEventListener('touchend', (e) => {
+      onEnd(e.changedTouches[0].clientX);
+    });
+
+    // Mouse
+    let mouseDown = false;
+
+    this.imageLink.addEventListener('mousedown', (e) => {
+      mouseDown = true;
+      onStart(e.clientX, e.clientY);
+      e.preventDefault();
+    });
+
+    this.imageLink.addEventListener('mousemove', (e) => {
+      if (mouseDown) onMove(e.clientX, e.clientY, e);
+    });
+
+    window.addEventListener('mouseup', (e) => {
+      if (mouseDown) {
+        mouseDown = false;
+        onEnd(e.clientX);
+      }
+    });
+  }
+
+  processImages(images) {
+    const sorted = images
+      .filter(img => img?.url)
       .sort((a, b) => (a.sort || 0) - (b.sort || 0))
-      .slice(0, 2)
-      .map(img => ({ url: img.url, alt: img.alt }));
+      .slice(0, 2);
 
-    if (additionalImages.length === 0) {
-      const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
-      if (dotsContainer) {
-        dotsContainer.style.display = 'none';
-      }
+    if (sorted.length === 0) {
+      this.hideDots();
       return;
     }
 
-    this.additionalImages = additionalImages;
+    this.additionalImages = sorted;
 
-    // Show dots
-    const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
-    if (dotsContainer) {
-      dotsContainer.style.display = 'flex';
-    }
+    // Preload and add images
+    sorted.forEach((img, i) => {
+      this.addImage(img, i + 1);
+    });
 
-    // Preload images
-    this.preloadAllImages();
-  }
-
-  preloadAllImages() {
-    if (this.additionalImages && this.additionalImages.length > 0) {
-      this.addImageToSlider(this.additionalImages[0], 1);
-
-      if (this.additionalImages.length > 1) {
-        this.addImageToSlider(this.additionalImages[1], 2);
-      }
+    // Hide unused dots
+    if (sorted.length < 2) {
+      const dot3 = this.dotsContainer?.querySelector('[data-index="2"]');
+      if (dot3) dot3.style.display = 'none';
     }
   }
 
-  addImageToSlider(image, index) {
-    const imageContainer = this.getImageContainer();
-    if (!image?.url || !imageContainer) return;
-
-    const existingImg = imageContainer.querySelector(`.product-slider-image[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
-    if (existingImg) return;
+  addImage(imgData, index) {
+    if (!this.imageLink) return;
 
     const img = document.createElement('img');
     img.className = 'product-slider-image';
-    img.src = image.url;
-    img.alt = image.alt || 'Product image';
     img.dataset.sliderId = this.sliderId;
-    img.dataset.productId = this.productId;
-    img.dataset.index = String(index);
-
-    img.onload = () => {
-      const dot = this.imageWrapper.querySelector(`.product-slider-dot[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
-      if (dot) dot.classList.add('loaded');
-    };
+    img.dataset.index = index;
+    img.alt = imgData.alt || 'Product image';
+    img.loading = 'lazy';
+    img.src = imgData.url;
 
     img.onerror = () => {
       img.remove();
-      const dot = this.imageWrapper.querySelector(`.product-slider-dot[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
-      if (dot) {
-        dot.remove();
-        this.checkDotsVisibility();
-      }
+      const dot = this.dotsContainer?.querySelector(`[data-index="${index}"]`);
+      if (dot) dot.style.display = 'none';
     };
 
-    imageContainer.appendChild(img);
+    this.imageLink.appendChild(img);
   }
 
-  checkDotsVisibility() {
-    const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
-    if (dotsContainer) {
-      const availableDots = dotsContainer.querySelectorAll('.product-slider-dot');
-      dotsContainer.style.display = availableDots.length <= 1 ? 'none' : 'flex';
-    }
-  }
-
-  hideDots() {
-    const dotsContainer = this.imageWrapper.querySelector(`.product-slider-dots[data-slider-id="${this.sliderId}"]`);
-    if (dotsContainer) {
-      dotsContainer.style.display = 'none';
-    }
-  }
-
-  changeSlide(index) {
-    if (this.additionalImages && index > 0 && this.additionalImages[index - 1]) {
-      this.addImageToSlider(this.additionalImages[index - 1], index);
-    }
-
+  goToSlide(index) {
     this.currentSlide = index;
 
-    const imageContainer = this.getImageContainer();
-    if (!imageContainer) return;
+    // Update dots
+    this.dotsContainer?.querySelectorAll('.product-slider-dot').forEach((dot, i) => {
+      dot.classList.toggle('active', i === index);
+    });
 
-    this.imageContainer = imageContainer;
-
-    const mainImage = imageContainer.querySelector('img.lazy, img[loading="lazy"], img:first-child:not(.product-slider-image)');
-    const additionalImages = imageContainer.querySelectorAll(`.product-slider-image[data-slider-id="${this.sliderId}"]`);
-    const dots = this.imageWrapper.querySelectorAll(`.product-slider-dot[data-slider-id="${this.sliderId}"]`);
-
-    dots.forEach(dot => dot.classList.remove('active'));
-
-    const activeDot = this.imageWrapper.querySelector(`.product-slider-dot[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
-    if (activeDot) activeDot.classList.add('active');
+    // Get elements
+    const mainImg = this.imageLink?.querySelector('img:not(.product-slider-image)');
+    const sliderImgs = this.imageLink?.querySelectorAll('.product-slider-image');
 
     if (index === 0) {
-      if (mainImage) {
-        mainImage.style.visibility = 'visible';
-        mainImage.style.opacity = '1';
-        mainImage.style.zIndex = '10';
+      // Show main image
+      if (mainImg) {
+        mainImg.style.cssText = 'visibility:visible;opacity:1;z-index:10;';
       }
-      additionalImages.forEach(img => img.classList.remove('active'));
+      sliderImgs?.forEach(img => img.classList.remove('active'));
     } else {
-      if (mainImage) {
-        mainImage.style.visibility = 'hidden';
-        mainImage.style.opacity = '0';
-        mainImage.style.zIndex = '5';
+      // Hide main, show slider image
+      if (mainImg) {
+        mainImg.style.cssText = 'visibility:hidden;opacity:0;z-index:5;';
       }
-      additionalImages.forEach(img => img.classList.remove('active'));
-
-      const activeImage = imageContainer.querySelector(`.product-slider-image[data-slider-id="${this.sliderId}"][data-index="${index}"]`);
-      if (activeImage) {
-        activeImage.classList.add('active');
-      } else if (mainImage) {
-        mainImage.style.visibility = 'visible';
-        mainImage.style.opacity = '1';
-        mainImage.style.zIndex = '10';
-      }
+      sliderImgs?.forEach(img => {
+        img.classList.toggle('active', parseInt(img.dataset.index) === index);
+      });
     }
   }
 
   prevSlide() {
-    const totalSlides = this.imageWrapper.querySelectorAll(`.product-slider-dot[data-slider-id="${this.sliderId}"]`).length;
-    const newIndex = (this.currentSlide - 1 + totalSlides) % totalSlides;
-    this.changeSlide(newIndex);
+    const total = this.additionalImages.length + 1;
+    this.goToSlide((this.currentSlide - 1 + total) % total);
   }
 
   nextSlide() {
-    const totalSlides = this.imageWrapper.querySelectorAll(`.product-slider-dot[data-slider-id="${this.sliderId}"]`).length;
-    const newIndex = (this.currentSlide + 1) % totalSlides;
-    this.changeSlide(newIndex);
+    const total = this.additionalImages.length + 1;
+    this.goToSlide((this.currentSlide + 1) % total);
   }
 
-  triggerHapticFeedback(intensity) {
-    try {
-      if (window.navigator && window.navigator.vibrate) {
-        switch (intensity) {
-          case 'light':
-            window.navigator.vibrate(10);
-            break;
-          case 'medium':
-            window.navigator.vibrate(25);
-            break;
-          case 'strong':
-            window.navigator.vibrate([10, 20, 30]);
-            break;
-        }
-      }
-    } catch (e) {
-      // Vibration not supported
+  hideDots() {
+    if (this.dotsContainer) {
+      this.dotsContainer.style.display = 'none';
     }
+  }
+
+  haptic(intensity) {
+    try {
+      if (navigator.vibrate) {
+        navigator.vibrate(intensity === 'light' ? 10 : 25);
+      }
+    } catch (e) {}
   }
 }
 
-// Auto-initialize on import
-const productCardEnhancer = new ProductCardEnhancer();
+// Auto-initialize
+const enhancer = new ProductCardEnhancer();
 
-export default productCardEnhancer;
+export default enhancer;
