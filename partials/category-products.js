@@ -52,7 +52,7 @@ class CategoryProductsComponent extends HTMLElement {
             1567146102: { name: "عبايات بشت", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%A8%D8%B4%D8%AA/c1567146102" },
             832995956: { name: "عبايات مطرزة", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D8%B7%D8%B1%D8%B2%D8%A9/c832995956" },
             2031226480: { name: "عبايات رأس", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B1%D8%A3%D8%B3/c2031226480" },
-            1122348775: { name: "عبايات صيفية", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B5%D9%8A%D9%81%D9%8A%D8%A9/c1122348775" },
+            270965526: { name: "شتاء 2026", url: "https://darlena.com/%D8%B4%D8%AA%D8%A7%D8%A1-2026/c270965526" },
             692927841: { name: "طرح", url: "https://darlena.com/%D8%B7%D8%B1%D8%AD/c692927841" },
             639447590: { name: "نقابات", url: "https://darlena.com/%D9%86%D9%82%D8%A7%D8%A8%D8%A7%D8%AA/c639447590" },
             114756598: { name: "عبايات شيفون", url: "https://darlena.com/%D8%B4%D9%8A%D9%81%D9%88%D9%86/c114756598" }
@@ -60,7 +60,7 @@ class CategoryProductsComponent extends HTMLElement {
         const priorityOrder = {
             'رائج الان': 1,
             'جديدنا': 2,
-            'عبايات صيفية': 3,
+            'شتاء 2026': 3,
             'جميع العبايات': 4,
             'عبايات كلوش': 5,
             'جلابيات': 6,
