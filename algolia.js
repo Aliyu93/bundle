@@ -1727,8 +1727,17 @@
                 box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             }
 
-            /* Responsive - smaller controls on mobile */
+            /* Responsive - mobile optimizations */
             @media (max-width: 767px) {
+                /* Constrain video height for better viewport fit (~2.25 cards visible) */
+                .video-item {
+                    max-height: 240px;
+                }
+
+                .video-slide-card {
+                    max-height: 300px;
+                }
+
                 .video-overlay .play-button,
                 .video-overlay .expand-button {
                     width: 36px;
