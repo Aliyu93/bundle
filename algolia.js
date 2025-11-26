@@ -1573,6 +1573,7 @@
   var initAttempts = 0;
   var MAX_ATTEMPTS = 2;
   function initRanking() {
+    if (window.location.pathname.includes("/cart")) return;
     console.log(`[PR Init] Attempt ${initAttempts + 1}/${MAX_ATTEMPTS}`);
     if (initialized) return;
     initAttempts++;
@@ -1887,6 +1888,7 @@
      * Initialize transformer
      */
     init() {
+      if (window.location.pathname.includes("/cart")) return;
       this.injectStyles();
       if (document.readyState === "loading") {
         document.addEventListener("DOMContentLoaded", () => this.transform());
@@ -2031,6 +2033,7 @@
      * Initialize the enhancer
      */
     init() {
+      if (window.location.pathname.includes("/cart")) return;
       this.injectStyles();
       this.enhanceAllTitles();
       if (document.readyState === "loading") {
@@ -2162,6 +2165,7 @@
       this.init();
     }
     init() {
+      if (window.location.pathname.includes("/cart")) return;
       injectStyles();
       this.startPolling();
       const reactivate = () => {

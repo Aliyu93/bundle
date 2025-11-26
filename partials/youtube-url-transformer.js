@@ -313,6 +313,9 @@ class YouTubeUrlTransformer {
    * Initialize transformer
    */
   init() {
+    // Skip on cart page
+    if (window.location.pathname.includes('/cart')) return;
+
     this.injectStyles();
 
     // Initial transform

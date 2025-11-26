@@ -8,6 +8,9 @@ let initAttempts = 0;
 const MAX_ATTEMPTS = 2;
 
 function initRanking() {
+  // Skip on cart page
+  if (window.location.pathname.includes('/cart')) return;
+
   console.log(`[PR Init] Attempt ${initAttempts + 1}/${MAX_ATTEMPTS}`);
 
   // Prevent multiple initializations

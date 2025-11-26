@@ -144,6 +144,9 @@ class ProductCardEnhancer {
   }
 
   init() {
+    // Skip on cart page
+    if (window.location.pathname.includes('/cart')) return;
+
     injectStyles();
 
     // Start polling immediately

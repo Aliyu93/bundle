@@ -160,6 +160,9 @@ class ProductTitleEnhancer {
    * Initialize the enhancer
    */
   init() {
+    // Skip on cart page
+    if (window.location.pathname.includes('/cart')) return;
+
     // 1. Inject CSS immediately (applies to existing elements)
     this.injectStyles();
 
