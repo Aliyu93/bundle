@@ -102,17 +102,27 @@ class VideoGalleryComponent extends HTMLElement {
                 height: auto;
             }
 
-            .video-item {
-                position: relative;
+            /* Card container - holds video + product info stacked */
+            .video-slide-card {
+                display: flex;
+                flex-direction: column;
                 border-radius: 12px;
                 overflow: hidden;
+                background: #fff;
+            }
+
+            /* Video container - fixed aspect ratio matching source */
+            .video-item {
+                position: relative;
                 background: #000;
+                height: 307px; /* Match source height */
+                max-height: 350px;
             }
 
             .video-wrapper {
                 position: relative;
                 width: 100%;
-                padding-bottom: 177.78%; /* 9:16 aspect ratio */
+                height: 100%;
             }
 
             .video-wrapper iframe {
@@ -123,8 +133,10 @@ class VideoGalleryComponent extends HTMLElement {
                 height: 100%;
                 border: none;
                 pointer-events: none;
+                object-fit: cover;
             }
 
+            /* Overlay - positioned within video-wrapper only */
             .video-overlay {
                 position: absolute;
                 top: 0;
@@ -148,8 +160,8 @@ class VideoGalleryComponent extends HTMLElement {
 
             .video-overlay .play-button,
             .video-overlay .expand-button {
-                width: 48px;
-                height: 48px;
+                width: 44px;
+                height: 44px;
                 border-radius: 50%;
                 background: rgba(255, 255, 255, 0.9);
                 display: flex;
@@ -167,16 +179,17 @@ class VideoGalleryComponent extends HTMLElement {
 
             .video-overlay .play-button i,
             .video-overlay .expand-button i {
-                font-size: 1.25rem;
+                font-size: 1.1rem;
                 color: #333;
             }
 
+            /* Controls - at bottom of video only */
             .video-controls {
                 position: absolute;
                 bottom: 0;
                 left: 0;
                 right: 0;
-                padding: 0.75rem;
+                padding: 0.5rem;
                 background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
                 display: flex;
                 justify-content: flex-start;
@@ -192,8 +205,8 @@ class VideoGalleryComponent extends HTMLElement {
             }
 
             .video-controls .control-btn {
-                width: 36px;
-                height: 36px;
+                width: 32px;
+                height: 32px;
                 border-radius: 50%;
                 background: rgba(255, 255, 255, 0.2);
                 border: none;
@@ -209,7 +222,7 @@ class VideoGalleryComponent extends HTMLElement {
             }
 
             .video-controls .control-btn i {
-                font-size: 1rem;
+                font-size: 0.875rem;
                 color: #fff;
             }
 
@@ -267,35 +280,13 @@ class VideoGalleryComponent extends HTMLElement {
                 transform: scale(1.2);
             }
 
-            /* Responsive */
-            @media (max-width: 767px) {
-                .video-overlay .play-button,
-                .video-overlay .expand-button {
-                    width: 40px;
-                    height: 40px;
-                }
-
-                .video-overlay .play-button i,
-                .video-overlay .expand-button i {
-                    font-size: 1rem;
-                }
-
-                .video-controls .control-btn {
-                    width: 32px;
-                    height: 32px;
-                }
-
-                .video-controls .control-btn i {
-                    font-size: 0.875rem;
-                }
-            }
-
-            /* Product Link Button */
+            /* Product Link Button - BELOW video, fully clickable */
             .video-product-info {
                 padding: 0.5rem;
                 background: #fafafa;
                 text-align: center;
-                border-radius: 0 0 12px 12px;
+                position: relative;
+                z-index: 20;
             }
 
             .video-product-info .product-link-btn {
@@ -319,6 +310,42 @@ class VideoGalleryComponent extends HTMLElement {
             .video-product-info .product-link-btn i {
                 font-size: 0.6rem;
             }
+
+            /* Responsive - smaller on mobile */
+            @media (max-width: 767px) {
+                .video-item {
+                    height: 280px;
+                }
+
+                .video-overlay .play-button,
+                .video-overlay .expand-button {
+                    width: 36px;
+                    height: 36px;
+                }
+
+                .video-overlay .play-button i,
+                .video-overlay .expand-button i {
+                    font-size: 0.9rem;
+                }
+
+                .video-controls .control-btn {
+                    width: 28px;
+                    height: 28px;
+                }
+
+                .video-controls .control-btn i {
+                    font-size: 0.75rem;
+                }
+
+                .video-product-info {
+                    padding: 0.4rem;
+                }
+
+                .video-product-info .product-link-btn {
+                    padding: 0.3rem 0.6rem;
+                    font-size: 0.7rem;
+                }
+            }
         `;
 
         document.head.appendChild(style);
@@ -327,41 +354,43 @@ class VideoGalleryComponent extends HTMLElement {
     render() {
         const slidesHtml = this.videos.map((video, index) => `
             <div class="swiper-slide">
-                <div class="video-item" data-video-id="${video.videoId}" data-video-index="${index}">
-                    <div class="video-wrapper">
-                        <iframe
-                            src="${this.getEmbedUrl(video.videoId)}"
-                            allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-                            allowfullscreen
-                            loading="lazy"
-                        ></iframe>
-                        <a
-                            data-fslightbox="video-gallery"
-                            data-type="video"
-                            href="${this.getLightboxUrl(video.videoId)}"
-                            class="video-lightbox-trigger"
-                            style="display: none;"
-                        ></a>
-                    </div>
-                    <div class="video-overlay">
-                        <div class="play-button" data-action="play" role="button" tabindex="0" aria-label="تشغيل الفيديو">
-                            <i class="sicon-play" aria-hidden="true"></i>
+                <div class="video-slide-card">
+                    <div class="video-item" data-video-id="${video.videoId}" data-video-index="${index}">
+                        <div class="video-wrapper">
+                            <iframe
+                                src="${this.getEmbedUrl(video.videoId)}"
+                                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
+                                allowfullscreen
+                                loading="lazy"
+                            ></iframe>
+                            <a
+                                data-fslightbox="video-gallery"
+                                data-type="video"
+                                href="${this.getLightboxUrl(video.videoId)}"
+                                class="video-lightbox-trigger"
+                                style="display: none;"
+                            ></a>
                         </div>
-                        <div class="expand-button" data-action="expand" role="button" tabindex="0" aria-label="توسيع الفيديو">
-                            <i class="sicon-expand" aria-hidden="true"></i>
+                        <div class="video-overlay">
+                            <div class="play-button" data-action="play" role="button" tabindex="0" aria-label="تشغيل الفيديو">
+                                <i class="sicon-play" aria-hidden="true"></i>
+                            </div>
+                            <div class="expand-button" data-action="expand" role="button" tabindex="0" aria-label="توسيع الفيديو">
+                                <i class="sicon-expand" aria-hidden="true"></i>
+                            </div>
+                        </div>
+                        <div class="video-controls">
+                            <button class="control-btn pause-btn playing muted" data-action="toggle-play" aria-label="إيقاف/تشغيل">
+                                <i class="sicon-play" aria-hidden="true"></i>
+                                <i class="sicon-pause" aria-hidden="true"></i>
+                            </button>
+                            <button class="control-btn mute-btn muted" data-action="toggle-mute" aria-label="كتم/إلغاء كتم الصوت">
+                                <i class="sicon-volume-high" aria-hidden="true"></i>
+                                <i class="sicon-volume-mute" aria-hidden="true"></i>
+                            </button>
                         </div>
                     </div>
-                    <div class="video-controls">
-                        <button class="control-btn pause-btn playing muted" data-action="toggle-play" aria-label="إيقاف/تشغيل">
-                            <i class="sicon-play" aria-hidden="true"></i>
-                            <i class="sicon-pause" aria-hidden="true"></i>
-                        </button>
-                        <button class="control-btn mute-btn muted" data-action="toggle-mute" aria-label="كتم/إلغاء كتم الصوت">
-                            <i class="sicon-volume-high" aria-hidden="true"></i>
-                            <i class="sicon-volume-mute" aria-hidden="true"></i>
-                        </button>
-                    </div>
-                    <!-- Product Link Button -->
+                    <!-- Product Link Button - OUTSIDE video-item, below video -->
                     ${video.productId ? `
                         <div class="video-product-info">
                             <a href="https://darlena.com/product/p${video.productId}" class="product-link-btn">
