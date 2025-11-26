@@ -1373,11 +1373,11 @@
     constructor() {
       super();
       this.videos = [
-        { videoId: "5c674d0e8f966c603fc6d0045b713869", productId: 258399638 },
-        { videoId: "0012cc79a7fd459c9389670ba37c6b1b", productId: 823750915 },
-        { videoId: "939af62bb2f7e551b14c237b02cd6493", productId: 275656778 },
-        { videoId: "498113e070bbef6e76ad35058dc92071", productId: 854730525 },
-        { videoId: "ad277fe9aae194be61f6b1b5ea5945ad", productId: 890636222 }
+        { videoId: "5c674d0e8f966c603fc6d0045b713869", productId: 258399638, productName: "\u0641\u0633\u062A\u0627\u0646 \u0633\u0647\u0631\u0629 \u0637\u0648\u064A\u0644", productPrice: "\u0664\u0665\u0660 \u0631.\u0633" },
+        { videoId: "0012cc79a7fd459c9389670ba37c6b1b", productId: 823750915, productName: "\u0639\u0628\u0627\u064A\u0629 \u0645\u0637\u0631\u0632\u0629 \u0641\u0627\u062E\u0631\u0629", productPrice: "\u0666\u0668\u0660 \u0631.\u0633" },
+        { videoId: "939af62bb2f7e551b14c237b02cd6493", productId: 275656778, productName: "\u0637\u0642\u0645 \u0643\u0627\u062C\u0648\u0627\u0644 \u0623\u0646\u064A\u0642", productPrice: "\u0663\u0662\u0660 \u0631.\u0633" },
+        { videoId: "498113e070bbef6e76ad35058dc92071", productId: 854730525, productName: "\u062C\u0627\u0643\u064A\u062A \u0635\u0648\u0641 \u0634\u062A\u0648\u064A", productPrice: "\u0665\u0665\u0660 \u0631.\u0633" },
+        { videoId: "ad277fe9aae194be61f6b1b5ea5945ad", productId: 890636222, productName: "\u0628\u0644\u0648\u0632\u0629 \u062D\u0631\u064A\u0631 \u0646\u0627\u0639\u0645\u0629", productPrice: "\u0662\u0668\u0660 \u0631.\u0633" }
       ];
       this.swiper = null;
       this.observer = null;
@@ -1636,35 +1636,95 @@
                 transform: scale(1.2);
             }
 
-            /* Product Link Button - BELOW video, fully clickable */
-            .video-product-info {
-                padding: 0.5rem;
-                background: #fafafa;
-                text-align: center;
+            /* Product Footer - Modern Minimal Design */
+            .video-product-footer {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                padding: 0.75rem;
+                background: #ffffff;
+                border-radius: 0 0 12px 12px;
+                border-top: 1px solid rgba(212, 172, 132, 0.15);
+                gap: 0.5rem;
+                min-height: 56px;
                 position: relative;
                 z-index: 20;
             }
 
-            .video-product-info .product-link-btn {
-                display: inline-flex;
-                align-items: center;
-                gap: 0.25rem;
-                padding: 0.4rem 0.8rem;
-                background: #d4ac84;
-                color: #fff;
-                border-radius: 6px;
+            .video-product-footer__content {
+                flex: 1;
+                display: flex;
+                flex-direction: column;
+                gap: 0.125rem;
+                min-width: 0;
+                text-align: right;
+            }
+
+            .video-product-footer__title {
+                font-size: 0.8125rem;
+                font-weight: 600;
+                color: #2d2d2d;
+                line-height: 1.3;
+                margin: 0;
+                white-space: nowrap;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                transition: color 0.2s ease;
+            }
+
+            .video-product-footer__price {
                 font-size: 0.75rem;
                 font-weight: 500;
+                color: #d4ac84;
+                line-height: 1.2;
+            }
+
+            .video-product-footer__cta {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 36px;
+                height: 36px;
+                min-width: 36px;
+                background: linear-gradient(135deg, #d4ac84 0%, #c49b73 100%);
+                border-radius: 8px;
+                color: #ffffff;
                 text-decoration: none;
-                transition: background 0.2s ease;
+                transition: all 0.25s ease;
+                box-shadow: 0 2px 8px rgba(212, 172, 132, 0.25);
             }
 
-            .video-product-info .product-link-btn:hover {
-                background: #c49b73;
+            .video-product-footer__cta i {
+                font-size: 0.875rem;
+                transition: transform 0.2s ease;
             }
 
-            .video-product-info .product-link-btn i {
-                font-size: 0.6rem;
+            .video-product-footer:hover .video-product-footer__title {
+                color: #d4ac84;
+            }
+
+            .video-product-footer__cta:hover {
+                background: linear-gradient(135deg, #c49b73 0%, #b38a62 100%);
+                transform: translateX(-2px);
+                box-shadow: 0 4px 12px rgba(212, 172, 132, 0.35);
+            }
+
+            .video-product-footer__cta:hover i {
+                transform: translateX(-2px);
+            }
+
+            .video-product-footer__cta:active {
+                transform: scale(0.95);
+            }
+
+            /* Card shadow enhancement */
+            .video-slide-card {
+                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
+                transition: box-shadow 0.3s ease;
+            }
+
+            .video-slide-card:hover {
+                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             }
 
             /* Responsive - smaller controls on mobile */
@@ -1689,13 +1749,28 @@
                     font-size: 0.75rem;
                 }
 
-                .video-product-info {
-                    padding: 0.4rem;
+                .video-product-footer {
+                    padding: 0.625rem;
+                    min-height: 48px;
                 }
 
-                .video-product-info .product-link-btn {
-                    padding: 0.3rem 0.6rem;
-                    font-size: 0.7rem;
+                .video-product-footer__title {
+                    font-size: 0.75rem;
+                }
+
+                .video-product-footer__price {
+                    font-size: 0.6875rem;
+                }
+
+                .video-product-footer__cta {
+                    width: 32px;
+                    height: 32px;
+                    min-width: 32px;
+                    border-radius: 6px;
+                }
+
+                .video-product-footer__cta i {
+                    font-size: 0.75rem;
                 }
             }
         `;
@@ -1740,12 +1815,17 @@
                             </button>
                         </div>
                     </div>
-                    <!-- Product Link Button - OUTSIDE video-item, below video -->
+                    <!-- Product Footer - Modern minimal design -->
                     ${video.productId ? `
-                        <div class="video-product-info">
-                            <a href="https://darlena.com/product/p${video.productId}" class="product-link-btn">
-                                \u0639\u0631\u0636 \u0627\u0644\u0645\u0646\u062A\u062C
-                                <i class="sicon-keyboard_arrow_left"></i>
+                        <div class="video-product-footer">
+                            <div class="video-product-footer__content">
+                                <h4 class="video-product-footer__title">${video.productName || "\u0645\u0646\u062A\u062C"}</h4>
+                                <span class="video-product-footer__price">${video.productPrice || ""}</span>
+                            </div>
+                            <a href="https://darlena.com/product/p${video.productId}"
+                               class="video-product-footer__cta"
+                               aria-label="\u0639\u0631\u0636 \u0627\u0644\u0645\u0646\u062A\u062C: ${video.productName || "\u0645\u0646\u062A\u062C"}">
+                                <i class="sicon-arrow-left" aria-hidden="true"></i>
                             </a>
                         </div>
                     ` : ""}
