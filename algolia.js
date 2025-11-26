@@ -1401,8 +1401,9 @@
         muted: "true",
         loop: "true",
         controls: "false",
-        // Hidden controls, click to toggle play/pause
-        preload: "metadata"
+        preload: "metadata",
+        fit: "cover"
+        // Crop to fill container, no black bars
       });
       return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;
     }

@@ -42,8 +42,9 @@ class VideoGalleryComponent extends HTMLElement {
             autoplay: 'true',
             muted: 'true',
             loop: 'true',
-            controls: 'false',  // Hidden controls, click to toggle play/pause
-            preload: 'metadata'
+            controls: 'false',
+            preload: 'metadata',
+            fit: 'cover'  // Crop to fill container, no black bars
         });
         return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;
     }
