@@ -138,8 +138,9 @@ class VideoGalleryComponent extends HTMLElement {
             }
 
             /* Hide custom overlay - using Cloudflare native controls instead */
-            .video-overlay,
-            .video-controls {
+            /* SCOPED to mahaba-video-gallery only - do not affect rest of page */
+            mahaba-video-gallery .video-overlay,
+            mahaba-video-gallery .video-controls {
                 display: none !important;
             }
 
