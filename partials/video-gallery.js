@@ -111,12 +111,13 @@ class VideoGalleryComponent extends HTMLElement {
                 background: #fff;
             }
 
-            /* Video container - fixed aspect ratio matching source */
+            /* Video container - 9:16 vertical aspect ratio */
             .video-item {
                 position: relative;
                 background: #000;
-                height: 307px; /* Match source height */
-                max-height: 350px;
+                aspect-ratio: 9 / 16;
+                border-radius: 12px 12px 0 0;
+                overflow: hidden;
             }
 
             .video-wrapper {
@@ -311,12 +312,8 @@ class VideoGalleryComponent extends HTMLElement {
                 font-size: 0.6rem;
             }
 
-            /* Responsive - smaller on mobile */
+            /* Responsive - smaller controls on mobile */
             @media (max-width: 767px) {
-                .video-item {
-                    height: 280px;
-                }
-
                 .video-overlay .play-button,
                 .video-overlay .expand-button {
                     width: 36px;
@@ -429,14 +426,14 @@ class VideoGalleryComponent extends HTMLElement {
 
         this.swiper = new Swiper(swiperEl, {
             direction: 'horizontal',
-            slidesPerView: 2.5,
+            slidesPerView: 2.25,
             spaceBetween: 8,
             pagination: {
                 el: '.swiper-pagination',
                 clickable: true
             },
             breakpoints: {
-                340: { slidesPerView: 2.5, spaceBetween: 8 },
+                340: { slidesPerView: 2.25, spaceBetween: 8 },
                 768: { slidesPerView: 3.5, spaceBetween: 10 },
                 1024: { slidesPerView: 5, spaceBetween: 10 }
             }
