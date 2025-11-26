@@ -37,12 +37,12 @@ class VideoGalleryComponent extends HTMLElement {
         this.swiper?.destroy();
     }
 
-    getEmbedUrl(videoId, withControls = false) {
+    getEmbedUrl(videoId) {
         const params = new URLSearchParams({
             autoplay: 'true',
             muted: 'true',
             loop: 'true',
-            controls: withControls ? 'true' : 'false',
+            controls: 'true',  // Use Cloudflare native controls
             preload: 'metadata'
         });
         return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;
@@ -133,11 +133,17 @@ class VideoGalleryComponent extends HTMLElement {
                 width: 100%;
                 height: 100%;
                 border: none;
-                pointer-events: none;
+                pointer-events: auto;  /* Enable Cloudflare native controls */
                 object-fit: cover;
             }
 
-            /* Overlay - positioned within video-wrapper only */
+            /* Hide custom overlay - using Cloudflare native controls instead */
+            .video-overlay,
+            .video-controls {
+                display: none !important;
+            }
+
+            /* Overlay - positioned within video-wrapper only (HIDDEN) */
             .video-overlay {
                 position: absolute;
                 top: 0;
@@ -382,9 +388,9 @@ class VideoGalleryComponent extends HTMLElement {
 
             /* Responsive - smaller controls on mobile */
             @media (max-width: 767px) {
-                /* Force slide width to show 2.25 videos - scoped to video gallery only */
+                /* Force slide width to show 2.25 videos - using viewport units */
                 .video-gallery-swiper .swiper-slide {
-                    width: calc((100% - 10px) / 2.25) !important;
+                    width: calc((100vw - 32px) / 2.25) !important;
                     flex-shrink: 0 !important;
                 }
 
@@ -436,7 +442,7 @@ class VideoGalleryComponent extends HTMLElement {
             /* Small phones - even more compact */
             @media (max-width: 375px) {
                 .video-gallery-swiper .swiper-slide {
-                    width: calc((100% - 8px) / 2.25) !important;
+                    width: calc((100vw - 32px) / 2.25) !important;
                 }
 
                 .video-item {
