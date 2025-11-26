@@ -98,11 +98,11 @@ class VideoGalleryComponent extends HTMLElement {
                 padding: 0 1rem;
             }
 
-            .video-gallery-section {
+            mahaba-video-gallery .video-gallery-section {
                 margin-bottom: 2rem;
             }
 
-            .video-gallery-header {
+            mahaba-video-gallery .video-gallery-header {
                 display: flex;
                 justify-content: space-between;
                 align-items: center;
@@ -111,32 +111,32 @@ class VideoGalleryComponent extends HTMLElement {
                 border-bottom: 1px solid rgba(212, 172, 132, 0.1);
             }
 
-            .video-gallery-title {
+            mahaba-video-gallery .video-gallery-title {
                 font-size: 1.25rem;
                 font-weight: 600;
                 color: #d4ac84;
                 margin: 0;
             }
 
-            .videos-gallery-container {
+            mahaba-video-gallery .videos-gallery-container {
                 position: relative;
             }
 
-            .video-gallery-swiper {
+            mahaba-video-gallery .video-gallery-swiper {
                 overflow: hidden;
             }
 
-            .video-gallery-swiper .swiper-wrapper {
+            mahaba-video-gallery .video-gallery-swiper .swiper-wrapper {
                 display: flex;
             }
 
-            .video-gallery-swiper .swiper-slide {
+            mahaba-video-gallery .video-gallery-swiper .swiper-slide {
                 flex-shrink: 0;
                 height: auto;
             }
 
             /* Card container - holds video + product info stacked */
-            .video-slide-card {
+            mahaba-video-gallery .video-slide-card {
                 display: flex;
                 flex-direction: column;
                 border-radius: 12px;
@@ -145,7 +145,7 @@ class VideoGalleryComponent extends HTMLElement {
             }
 
             /* Video container - fixed height on mobile, aspect-ratio on tablet+ */
-            .video-item {
+            mahaba-video-gallery .video-item {
                 position: relative;
                 background: #000;
                 height: 280px;
@@ -153,14 +153,14 @@ class VideoGalleryComponent extends HTMLElement {
                 overflow: hidden;
             }
 
-            .video-wrapper {
+            mahaba-video-gallery .video-wrapper {
                 position: relative;
                 width: 100%;
                 height: 100%;
                 overflow: hidden;  /* Crop scaled iframe edges */
             }
 
-            .video-wrapper iframe {
+            mahaba-video-gallery .video-wrapper iframe {
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -180,7 +180,7 @@ class VideoGalleryComponent extends HTMLElement {
             }
 
             /* Overlay - positioned within video-wrapper only (HIDDEN) */
-            .video-overlay {
+            mahaba-video-gallery .video-overlay {
                 position: absolute;
                 top: 0;
                 left: 0;
@@ -196,13 +196,13 @@ class VideoGalleryComponent extends HTMLElement {
                 z-index: 10;
             }
 
-            .video-item:hover .video-overlay,
-            .video-overlay.show {
+            mahaba-video-gallery .video-item:hover .video-overlay,
+            mahaba-video-gallery .video-overlay.show {
                 opacity: 1;
             }
 
-            .video-overlay .play-button,
-            .video-overlay .expand-button {
+            mahaba-video-gallery .video-overlay .play-button,
+            mahaba-video-gallery .video-overlay .expand-button {
                 width: 44px;
                 height: 44px;
                 border-radius: 50%;
@@ -214,20 +214,20 @@ class VideoGalleryComponent extends HTMLElement {
                 transition: transform 0.2s ease, background 0.2s ease;
             }
 
-            .video-overlay .play-button:hover,
-            .video-overlay .expand-button:hover {
+            mahaba-video-gallery .video-overlay .play-button:hover,
+            mahaba-video-gallery .video-overlay .expand-button:hover {
                 transform: scale(1.1);
                 background: #fff;
             }
 
-            .video-overlay .play-button i,
-            .video-overlay .expand-button i {
+            mahaba-video-gallery .video-overlay .play-button i,
+            mahaba-video-gallery .video-overlay .expand-button i {
                 font-size: 1.1rem;
                 color: #333;
             }
 
             /* Controls - at bottom of video only */
-            .video-controls {
+            mahaba-video-gallery .video-controls {
                 position: absolute;
                 bottom: 0;
                 left: 0;
@@ -242,12 +242,12 @@ class VideoGalleryComponent extends HTMLElement {
                 transition: opacity 0.3s ease;
             }
 
-            .video-item:hover .video-controls,
-            .video-controls.show {
+            mahaba-video-gallery .video-item:hover .video-controls,
+            mahaba-video-gallery .video-controls.show {
                 opacity: 1;
             }
 
-            .video-controls .control-btn {
+            mahaba-video-gallery .video-controls .control-btn {
                 width: 32px;
                 height: 32px;
                 border-radius: 50%;
@@ -260,48 +260,48 @@ class VideoGalleryComponent extends HTMLElement {
                 transition: background 0.2s ease;
             }
 
-            .video-controls .control-btn:hover {
+            mahaba-video-gallery .video-controls .control-btn:hover {
                 background: rgba(255, 255, 255, 0.4);
             }
 
-            .video-controls .control-btn i {
+            mahaba-video-gallery .video-controls .control-btn i {
                 font-size: 0.875rem;
                 color: #fff;
             }
 
-            .video-controls .control-btn.playing .sicon-play {
+            mahaba-video-gallery .video-controls .control-btn.playing .sicon-play {
                 display: none;
             }
 
-            .video-controls .control-btn.playing .sicon-pause {
+            mahaba-video-gallery .video-controls .control-btn.playing .sicon-pause {
                 display: inline;
             }
 
-            .video-controls .control-btn:not(.playing) .sicon-play {
+            mahaba-video-gallery .video-controls .control-btn:not(.playing) .sicon-play {
                 display: inline;
             }
 
-            .video-controls .control-btn:not(.playing) .sicon-pause {
+            mahaba-video-gallery .video-controls .control-btn:not(.playing) .sicon-pause {
                 display: none;
             }
 
-            .video-controls .mute-btn.muted .sicon-volume-high {
+            mahaba-video-gallery .video-controls .mute-btn.muted .sicon-volume-high {
                 display: none;
             }
 
-            .video-controls .mute-btn.muted .sicon-volume-mute {
+            mahaba-video-gallery .video-controls .mute-btn.muted .sicon-volume-mute {
                 display: inline;
             }
 
-            .video-controls .mute-btn:not(.muted) .sicon-volume-high {
+            mahaba-video-gallery .video-controls .mute-btn:not(.muted) .sicon-volume-high {
                 display: inline;
             }
 
-            .video-controls .mute-btn:not(.muted) .sicon-volume-mute {
+            mahaba-video-gallery .video-controls .mute-btn:not(.muted) .sicon-volume-mute {
                 display: none;
             }
 
-            .video-gallery-swiper .swiper-pagination {
+            mahaba-video-gallery .video-gallery-swiper .swiper-pagination {
                 position: relative;
                 margin-top: 1rem;
                 display: flex;
@@ -309,7 +309,7 @@ class VideoGalleryComponent extends HTMLElement {
                 gap: 0.5rem;
             }
 
-            .video-gallery-swiper .swiper-pagination-bullet {
+            mahaba-video-gallery .video-gallery-swiper .swiper-pagination-bullet {
                 width: 8px;
                 height: 8px;
                 border-radius: 50%;
@@ -318,13 +318,13 @@ class VideoGalleryComponent extends HTMLElement {
                 transition: background 0.2s ease, transform 0.2s ease;
             }
 
-            .video-gallery-swiper .swiper-pagination-bullet-active {
+            mahaba-video-gallery .video-gallery-swiper .swiper-pagination-bullet-active {
                 background: #d4ac84;
                 transform: scale(1.2);
             }
 
             /* Product Footer - Modern Minimal Design */
-            .video-product-footer {
+            mahaba-video-gallery .video-product-footer {
                 display: flex;
                 align-items: center;
                 justify-content: space-between;
@@ -338,7 +338,7 @@ class VideoGalleryComponent extends HTMLElement {
                 z-index: 20;
             }
 
-            .video-product-footer__content {
+            mahaba-video-gallery .video-product-footer__content {
                 flex: 1;
                 display: flex;
                 flex-direction: column;
@@ -347,7 +347,7 @@ class VideoGalleryComponent extends HTMLElement {
                 text-align: right;
             }
 
-            .video-product-footer__title {
+            mahaba-video-gallery .video-product-footer__title {
                 font-size: 0.8125rem;
                 font-weight: 600;
                 color: #2d2d2d;
@@ -359,14 +359,14 @@ class VideoGalleryComponent extends HTMLElement {
                 transition: color 0.2s ease;
             }
 
-            .video-product-footer__price {
+            mahaba-video-gallery .video-product-footer__price {
                 font-size: 0.75rem;
                 font-weight: 500;
                 color: #d4ac84;
                 line-height: 1.2;
             }
 
-            .video-product-footer__cta {
+            mahaba-video-gallery .video-product-footer__cta {
                 display: flex;
                 align-items: center;
                 justify-content: center;
@@ -381,42 +381,42 @@ class VideoGalleryComponent extends HTMLElement {
                 box-shadow: 0 2px 8px rgba(212, 172, 132, 0.25);
             }
 
-            .video-product-footer__cta i {
+            mahaba-video-gallery .video-product-footer__cta i {
                 font-size: 0.875rem;
                 transition: transform 0.2s ease;
             }
 
-            .video-product-footer:hover .video-product-footer__title {
+            mahaba-video-gallery .video-product-footer:hover .video-product-footer__title {
                 color: #d4ac84;
             }
 
-            .video-product-footer__cta:hover {
+            mahaba-video-gallery .video-product-footer__cta:hover {
                 background: linear-gradient(135deg, #c49b73 0%, #b38a62 100%);
                 transform: translateX(-2px);
                 box-shadow: 0 4px 12px rgba(212, 172, 132, 0.35);
             }
 
-            .video-product-footer__cta:hover i {
+            mahaba-video-gallery .video-product-footer__cta:hover i {
                 transform: translateX(-2px);
             }
 
-            .video-product-footer__cta:active {
+            mahaba-video-gallery .video-product-footer__cta:active {
                 transform: scale(0.95);
             }
 
             /* Card shadow enhancement */
-            .video-slide-card {
+            mahaba-video-gallery .video-slide-card {
                 box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
                 transition: box-shadow 0.3s ease;
             }
 
-            .video-slide-card:hover {
+            mahaba-video-gallery .video-slide-card:hover {
                 box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             }
 
             /* Tablet and up - use aspect-ratio for proper 9:16 */
             @media (min-width: 768px) {
-                .video-item {
+                mahaba-video-gallery .video-item {
                     height: auto;
                     aspect-ratio: 9 / 16;
                 }
@@ -425,63 +425,63 @@ class VideoGalleryComponent extends HTMLElement {
             /* Responsive - smaller controls on mobile */
             @media (max-width: 767px) {
                 /* Force slide width to show 2.25 videos - using viewport units */
-                .video-gallery-swiper .swiper-slide {
+                mahaba-video-gallery .video-gallery-swiper .swiper-slide {
                     width: calc((100vw - 32px) / 2.25) !important;
                     flex-shrink: 0 !important;
                 }
 
-                .video-overlay .play-button,
-                .video-overlay .expand-button {
+                mahaba-video-gallery .video-overlay .play-button,
+                mahaba-video-gallery .video-overlay .expand-button {
                     width: 36px;
                     height: 36px;
                 }
 
-                .video-overlay .play-button i,
-                .video-overlay .expand-button i {
+                mahaba-video-gallery .video-overlay .play-button i,
+                mahaba-video-gallery .video-overlay .expand-button i {
                     font-size: 0.9rem;
                 }
 
-                .video-controls .control-btn {
+                mahaba-video-gallery .video-controls .control-btn {
                     width: 28px;
                     height: 28px;
                 }
 
-                .video-controls .control-btn i {
+                mahaba-video-gallery .video-controls .control-btn i {
                     font-size: 0.75rem;
                 }
 
-                .video-product-footer {
+                mahaba-video-gallery .video-product-footer {
                     padding: 0.625rem;
                     min-height: 48px;
                 }
 
-                .video-product-footer__title {
+                mahaba-video-gallery .video-product-footer__title {
                     font-size: 0.75rem;
                 }
 
-                .video-product-footer__price {
+                mahaba-video-gallery .video-product-footer__price {
                     font-size: 0.6875rem;
                 }
 
-                .video-product-footer__cta {
+                mahaba-video-gallery .video-product-footer__cta {
                     width: 32px;
                     height: 32px;
                     min-width: 32px;
                     border-radius: 6px;
                 }
 
-                .video-product-footer__cta i {
+                mahaba-video-gallery .video-product-footer__cta i {
                     font-size: 0.75rem;
                 }
             }
 
             /* Small phones - even more compact */
             @media (max-width: 375px) {
-                .video-gallery-swiper .swiper-slide {
+                mahaba-video-gallery .video-gallery-swiper .swiper-slide {
                     width: calc((100vw - 32px) / 2.25) !important;
                 }
 
-                .video-item {
+                mahaba-video-gallery .video-item {
                     height: 250px;
                 }
             }
