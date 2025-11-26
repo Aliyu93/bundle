@@ -1382,16 +1382,13 @@
       this.swiper = null;
       this.observer = null;
       this.activeVideoIndex = -1;
-      this.productDataMap = /* @__PURE__ */ new Map();
     }
-    async connectedCallback() {
+    connectedCallback() {
       this.injectStyles();
       this.render();
       this.initSwiper();
       this.setupIntersectionObserver();
       this.setupEventListeners();
-      await this.fetchProductData();
-      this.renderProductInfoCards();
       this.refreshLightbox();
     }
     disconnectedCallback() {
@@ -1648,7 +1645,7 @@
                 }
             }
 
-            /* Product Info Card */
+            /* Product Link Button */
             .video-product-info {
                 padding: 0.5rem;
                 background: #fafafa;
@@ -1656,52 +1653,16 @@
                 border-radius: 0 0 12px 12px;
             }
 
-            .video-product-info:empty {
-                display: none;
-            }
-
-            .video-product-info .product-name {
-                font-size: 0.75rem;
-                font-weight: 500;
-                color: #333;
-                margin: 0 0 0.25rem;
-                display: -webkit-box;
-                -webkit-line-clamp: 2;
-                -webkit-box-orient: vertical;
-                overflow: hidden;
-                line-height: 1.3;
-            }
-
-            .video-product-info .product-price-wrap {
-                font-size: 0.7rem;
-                margin-bottom: 0.4rem;
-            }
-
-            .video-product-info .product-sale-price {
-                color: #d4ac84;
-                font-weight: 600;
-            }
-
-            .video-product-info .product-regular-price {
-                color: #999;
-                text-decoration: line-through;
-                margin-right: 0.25rem;
-            }
-
-            .video-product-info .product-price {
-                color: #d4ac84;
-                font-weight: 600;
-            }
-
             .video-product-info .product-link-btn {
                 display: inline-flex;
                 align-items: center;
-                gap: 0.2rem;
-                padding: 0.3rem 0.6rem;
+                gap: 0.25rem;
+                padding: 0.4rem 0.8rem;
                 background: #d4ac84;
                 color: #fff;
-                border-radius: 4px;
-                font-size: 0.65rem;
+                border-radius: 6px;
+                font-size: 0.75rem;
+                font-weight: 500;
                 text-decoration: none;
                 transition: background 0.2s ease;
             }
@@ -1711,13 +1672,7 @@
             }
 
             .video-product-info .product-link-btn i {
-                font-size: 0.55rem;
-            }
-
-            .video-product-info .product-info-loading {
-                font-size: 0.65rem;
-                color: #999;
-                padding: 0.25rem;
+                font-size: 0.6rem;
             }
         `;
       document.head.appendChild(style);
@@ -1725,7 +1680,7 @@
     render() {
       const slidesHtml = this.videos.map((video, index) => `
             <div class="swiper-slide">
-                <div class="video-item" data-video-id="${video.videoId}" data-product-id="${video.productId || ""}" data-video-index="${index}">
+                <div class="video-item" data-video-id="${video.videoId}" data-video-index="${index}">
                     <div class="video-wrapper">
                         <iframe
                             src="${this.getEmbedUrl(video.videoId)}"
@@ -1759,10 +1714,15 @@
                             <i class="sicon-volume-mute" aria-hidden="true"></i>
                         </button>
                     </div>
-                    <!-- Product Info Card -->
-                    <div class="video-product-info" data-product-id="${video.productId || ""}">
-                        <div class="product-info-loading">\u062C\u0627\u0631\u0650 \u0627\u0644\u062A\u062D\u0645\u064A\u0644...</div>
-                    </div>
+                    <!-- Product Link Button -->
+                    ${video.productId ? `
+                        <div class="video-product-info">
+                            <a href="https://darlena.com/product/p${video.productId}" class="product-link-btn">
+                                \u0639\u0631\u0636 \u0627\u0644\u0645\u0646\u062A\u062C
+                                <i class="sicon-keyboard_arrow_left"></i>
+                            </a>
+                        </div>
+                    ` : ""}
                 </div>
             </div>
         `).join("");
@@ -1921,68 +1881,6 @@
           refreshFsLightbox();
         }, 100);
       }
-    }
-    async fetchProductData() {
-      const productIds = this.videos.map((v) => v.productId).filter((id) => id);
-      if (productIds.length === 0) return;
-      const productsList = document.createElement("salla-products-list");
-      productsList.setAttribute("source", "selected");
-      productsList.setAttribute("source-value", JSON.stringify(productIds));
-      productsList.style.cssText = "position:absolute;left:-9999px;visibility:hidden;pointer-events:none;";
-      this.appendChild(productsList);
-      return new Promise((resolve) => {
-        const timeoutId = setTimeout(() => {
-          this.extractProductData(productsList);
-          resolve();
-        }, 5e3);
-        const handler = () => {
-          clearTimeout(timeoutId);
-          setTimeout(() => {
-            this.extractProductData(productsList);
-            resolve();
-          }, 200);
-        };
-        window.salla?.event?.on("salla-products-list::products.fetched", handler);
-      });
-    }
-    extractProductData(productsList) {
-      const cards = productsList.querySelectorAll("[product]");
-      cards.forEach((card) => {
-        try {
-          const productJson = card.getAttribute("product");
-          if (productJson) {
-            const product = JSON.parse(productJson);
-            this.productDataMap.set(String(product.id), product);
-          }
-        } catch (e) {
-          console.warn("[VideoGallery] Failed to parse product:", e);
-        }
-      });
-      productsList.remove();
-    }
-    renderProductInfoCards() {
-      this.videos.forEach((video) => {
-        if (!video.productId) return;
-        const infoCard = this.querySelector(
-          `.video-product-info[data-product-id="${video.productId}"]`
-        );
-        if (!infoCard) return;
-        const product = this.productDataMap.get(String(video.productId));
-        if (!product) {
-          infoCard.innerHTML = "";
-          return;
-        }
-        const priceHtml = product.is_on_sale ? `<span class="product-sale-price">${salla.money(product.sale_price)}</span>
-                   <span class="product-regular-price">${salla.money(product.regular_price)}</span>` : `<span class="product-price">${salla.money(product.price)}</span>`;
-        infoCard.innerHTML = `
-                <h4 class="product-name">${product.name}</h4>
-                <div class="product-price-wrap">${priceHtml}</div>
-                <a href="${product.url}" class="product-link-btn">
-                    \u0639\u0631\u0636 \u0627\u0644\u0645\u0646\u062A\u062C
-                    <i class="sicon-keyboard_arrow_left"></i>
-                </a>
-            `;
-      });
     }
   };
   if (!customElements.get("mahaba-video-gallery")) {
