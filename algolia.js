@@ -1466,11 +1466,11 @@
                 background: #fff;
             }
 
-            /* Video container - 9:16 vertical aspect ratio */
+            /* Video container - fixed height on mobile, aspect-ratio on tablet+ */
             .video-item {
                 position: relative;
                 background: #000;
-                aspect-ratio: 9 / 16;
+                height: 280px;
                 border-radius: 12px 12px 0 0;
                 overflow: hidden;
             }
@@ -1727,17 +1727,16 @@
                 box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
             }
 
-            /* Responsive - mobile optimizations */
-            @media (max-width: 767px) {
-                /* Constrain video height for better viewport fit (~2.25 cards visible) */
+            /* Tablet and up - use aspect-ratio for proper 9:16 */
+            @media (min-width: 768px) {
                 .video-item {
-                    max-height: 240px;
+                    height: auto;
+                    aspect-ratio: 9 / 16;
                 }
+            }
 
-                .video-slide-card {
-                    max-height: 300px;
-                }
-
+            /* Responsive - smaller controls on mobile */
+            @media (max-width: 767px) {
                 .video-overlay .play-button,
                 .video-overlay .expand-button {
                     width: 36px;
@@ -1780,6 +1779,13 @@
 
                 .video-product-footer__cta i {
                     font-size: 0.75rem;
+                }
+            }
+
+            /* Small phones - even more compact */
+            @media (max-width: 375px) {
+                .video-item {
+                    height: 250px;
                 }
             }
         `;
