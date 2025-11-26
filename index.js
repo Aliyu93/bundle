@@ -13,6 +13,7 @@ import CartAddonsSlider from './components/CartAddonsSlider.js';
 import './components/AlgoliaRecommendationsSlider.js'; // Custom slider for product recommendations
 import './partials/product-ranking.js';       // Registers <product-ranking> custom element
 import './partials/category-products.js';     // Registers <mahaba-category-products> custom element
+import './partials/video-gallery.js';        // Registers <mahaba-video-gallery> custom element
 import productRecommendations from './partials/product-recommendations.js';
 import './product-ranking-init.js';           // Sets up category/tag page ranking
 import './partials/youtube-url-transformer.js'; // YouTube URL to click-to-play
@@ -210,6 +211,76 @@ function injectCartAddonsStyles() {
   document.head.appendChild(style);
 }
 
+/**
+ * Injects the <mahaba-video-gallery> element BEFORE the category products on homepage.
+ */
+function runVideoGalleryInjection() {
+  // Only run on homepage
+  if (!document.body.classList.contains('index')) {
+    return;
+  }
+
+  const ELEMENT_TAG = 'mahaba-video-gallery';
+
+  function injectElement() {
+    // Check if already exists
+    if (document.querySelector(ELEMENT_TAG)) {
+      return true;
+    }
+
+    // Try to find category products to insert before
+    const categoryProducts = document.querySelector('mahaba-category-products');
+    if (categoryProducts && categoryProducts.parentElement) {
+      const videoGallery = document.createElement(ELEMENT_TAG);
+      categoryProducts.parentElement.insertBefore(videoGallery, categoryProducts);
+      console.log('✅ [Algolia Bundle] Video gallery injected before category products');
+      return true;
+    }
+
+    // Fallback: find .app-inner and insert before footer
+    const appInner = document.querySelector('.app-inner');
+    const footer = document.querySelector('.store-footer');
+    if (appInner) {
+      const videoGallery = document.createElement(ELEMENT_TAG);
+      if (footer) {
+        appInner.insertBefore(videoGallery, footer);
+      } else {
+        appInner.appendChild(videoGallery);
+      }
+      console.log('✅ [Algolia Bundle] Video gallery injected (fallback location)');
+      return true;
+    }
+
+    return false;
+  }
+
+  // Try immediate injection
+  if (injectElement()) {
+    return;
+  }
+
+  // Setup MutationObserver for async content
+  console.log('[Algolia Bundle] Waiting for DOM to inject video gallery...');
+
+  const observer = new MutationObserver((mutations, obs) => {
+    const hasAddedNodes = mutations.some(m => m.addedNodes.length > 0);
+
+    if (hasAddedNodes && injectElement()) {
+      obs.disconnect();
+    }
+  });
+
+  observer.observe(document.body, {
+    childList: true,
+    subtree: true
+  });
+
+  // Timeout fallback - stop waiting after 10 seconds
+  setTimeout(() => {
+    observer.disconnect();
+  }, 10000);
+}
+
 function runCartAddonsInjection() {
   injectCartAddonsStyles();
   const ensure = () => {
@@ -256,6 +327,10 @@ function runCartAddonsInjection() {
 onReady(() => {
   // 1. Homepage: Inject category products component
   runHomepageInjection();
+
+  // 1b. Homepage: Inject video gallery (above category products)
+  // Slight delay to ensure category products is injected first
+  setTimeout(runVideoGalleryInjection, 100);
 
   // 2. Product page: Initialize recommendations (works correctly, unchanged)
   const isProductPage = document.querySelector('[id^="product-"]');

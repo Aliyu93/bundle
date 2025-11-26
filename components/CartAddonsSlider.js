@@ -297,7 +297,6 @@ class CartAddonsSlider extends HTMLElement {
 
 if (!customElements.get('cart-addons-slider')) {
     customElements.define('cart-addons-slider', CartAddonsSlider);
-    console.log('[CartAddonsSlider] Custom element defined');
 }
 
 export default CartAddonsSlider; 

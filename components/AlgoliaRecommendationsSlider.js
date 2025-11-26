@@ -502,7 +502,6 @@ class AlgoliaRecommendationsSlider extends HTMLElement {
 // Register custom element
 if (!customElements.get('algolia-recommendations-slider')) {
     customElements.define('algolia-recommendations-slider', AlgoliaRecommendationsSlider);
-    console.log('[AlgoliaSlider] Custom element registered');
 }
 
 export default AlgoliaRecommendationsSlider;
