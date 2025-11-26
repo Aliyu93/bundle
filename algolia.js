@@ -1384,12 +1384,39 @@
       this.activeVideoIndex = -1;
     }
     connectedCallback() {
+      this.loadCloudflareSDK();
       this.injectStyles();
       this.render();
       this.initSwiper();
       this.setupIntersectionObserver();
       this.setupEventListeners();
+      this.setupClickToPlay();
       this.refreshLightbox();
+    }
+    loadCloudflareSDK() {
+      if (!document.getElementById("cf-stream-sdk")) {
+        const script = document.createElement("script");
+        script.id = "cf-stream-sdk";
+        script.src = "https://embed.cloudflarestream.com/embed/sdk.latest.js";
+        document.head.appendChild(script);
+      }
+    }
+    setupClickToPlay() {
+      this.querySelectorAll(".video-item").forEach((item) => {
+        item.style.cursor = "pointer";
+        item.addEventListener("click", (e) => {
+          if (e.target.closest(".video-product-footer")) return;
+          const iframe = item.querySelector("iframe");
+          if (iframe && typeof Stream !== "undefined") {
+            const player = Stream(iframe);
+            if (player.paused) {
+              player.play();
+            } else {
+              player.pause();
+            }
+          }
+        });
+      });
     }
     disconnectedCallback() {
       this.observer?.disconnect();
@@ -1401,9 +1428,7 @@
         muted: "true",
         loop: "true",
         controls: "false",
-        preload: "metadata",
-        fit: "cover"
-        // Crop to fill container, no black bars
+        preload: "metadata"
       });
       return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;
     }
@@ -1481,6 +1506,7 @@
                 position: relative;
                 width: 100%;
                 height: 100%;
+                overflow: hidden;  /* Crop scaled iframe edges */
             }
 
             .video-wrapper iframe {
@@ -1490,8 +1516,9 @@
                 width: 100%;
                 height: 100%;
                 border: none;
-                pointer-events: auto;  /* Enable Cloudflare native controls */
-                object-fit: cover;
+                pointer-events: auto;
+                transform: scale(1.15);  /* Scale up to crop black bars */
+                transform-origin: center center;
             }
 
             /* Hide custom overlay - using Cloudflare native controls instead */
