@@ -1,8 +1,430 @@
-(()=>{var S=class{constructor(){this.baseUrl="https://me-central2-gtm-5v2mhn4-mwvlm.cloudfunctions.net/function-2",this.maxRetries=2,this.headers={Accept:"application/json","Cache-Control":"public, max-age=3600"},this.cache=new Map,this.fallbackEnabled=!0}async getProducts(e,t,r=0,s=12){if(!t)return null;let i=`${e}:${t}:${r}:${s}`;if(this.cache.has(i))return this.cache.get(i);let o=e==="category"?"catID":"tagID",l=e==="category"?"categoryById":"tagById",a=`${this.baseUrl}/?type=${l}&${o}=${encodeURIComponent(t)}&offset=${r}&limit=${s}`,d=null;try{let n=new AbortController,h=setTimeout(()=>n.abort(),2e3),u=await fetch(a,{method:"GET",headers:this.headers,signal:n.signal});if(clearTimeout(h),!u.ok)throw new Error(`HTTP error: ${u.status}`);if(d=await u.json(),d?.objectIDs?.length)return this.cache.set(i,d),d}catch{}if(!d?.objectIDs?.length&&this.fallbackEnabled)try{let n=await fetch(a,{method:"GET",headers:this.headers});if(n.ok&&(d=await n.json(),d?.objectIDs?.length))return this.cache.set(i,d),d}catch{}return d||{objectIDs:[],hasMore:!1}}async getRecommendations(e){if(!e)return[];let t=`recommendations:${e}`;if(this.cache.has(t))return this.cache.get(t);let r=`${this.baseUrl}/?type=recommendations&objectID=${encodeURIComponent(e)}`;try{let s=new AbortController,i=setTimeout(()=>s.abort(),3e3),o=await fetch(r,{method:"GET",headers:this.headers,signal:s.signal});if(clearTimeout(i),!o.ok)return[];let l=await o.json(),a=Array.isArray(l?.relatedProductIDs)?l.relatedProductIDs:[];return this.cache.set(t,a),a}catch{return[]}}async getFrequentlyBought(e){if(!e)return[];let t=`frequently-bought:${e}`;if(this.cache.has(t))return this.cache.get(t);let r=`${this.baseUrl}/?type=frequentlyBought&objectID=${encodeURIComponent(e)}`;try{let s=new AbortController,i=setTimeout(()=>s.abort(),3e3),o=await fetch(r,{method:"GET",headers:this.headers,signal:s.signal});if(clearTimeout(i),!o.ok)return[];let l=await o.json(),a=Array.isArray(l?.frequentlyBoughtIDs)?l.frequentlyBoughtIDs:[];return this.cache.set(t,a),a}catch{return[]}}async getCategoriesFromRedis(){let e="all-categories";if(this.cache.has(e))return this.cache.get(e);try{let t=new AbortController,r=setTimeout(()=>t.abort(),5e3),s=await fetch(`${this.baseUrl}/?type=categories`,{method:"GET",headers:this.headers,signal:t.signal});if(clearTimeout(r),!s.ok)return[];let o=(await s.json()).categories||[];return this.cache.set(e,o),o}catch{return[]}}async getGlobalProducts(e=0,t=12){let r=`global-products:${e}:${t}`;if(this.cache.has(r))return this.cache.get(r);try{let s=new AbortController,i=setTimeout(()=>s.abort(),3e3),o=`${this.baseUrl}/?type=categoryById&catID=trending-now&offset=${e}&limit=${t}`,l=await fetch(o,{method:"GET",headers:this.headers,signal:s.signal});if(clearTimeout(i),!l.ok)return{objectIDs:[],hasMore:!1};let a=await l.json(),d={objectIDs:a.objectIDs||[],hasMore:a.hasMore||!1};return this.cache.set(r,d),d}catch{return{objectIDs:[],hasMore:!1}}}async getCategoryPageById(e,t=0,r=12){return this.getProducts("category",e,t,r)}async getCategoryProducts(e,t,r){return this.getProducts("category",e,t,r)}async getTagProducts(e,t,r){return this.getProducts("tag",e,t,r)}},p=new S;var A=class extends HTMLElement{constructor(){super(),this.initialized=!1,this.productIds=[],this.structureReady=!1,this.cartListenerBound=!1,this.reloadScheduled=!1,this.reloadTimer=null}isCartPage(){return window.location.pathname.includes("/cart")&&document.querySelector('form[id^="item-"]')!==null}scheduleReload(){this.isCartPage()&&(this.reloadScheduled||(this.reloadScheduled=!0,this.reloadTimer&&clearTimeout(this.reloadTimer),this.reloadTimer=setTimeout(()=>{console.log("[CartAddonsSlider] Reloading cart page to show added item"),window.location.reload()},1e3)))}setupCartRefreshListener(){if(this.cartListenerBound||!this.isCartPage())return;this.cartListenerBound=!0;let e=()=>this.scheduleReload();window.salla?.cart?.event?.onItemAdded&&(window.salla.cart.event.onItemAdded(()=>this.scheduleReload()),console.log("[CartAddonsSlider] Listening to salla.cart.event.onItemAdded()")),document.addEventListener("salla::cart::item.added",e),console.log("[CartAddonsSlider] Listening to salla::cart::item.added")}connectedCallback(){this.ensureStructure(),this.setupCartRefreshListener(),!this.initialized&&this.getHighestValueItemFromDOM().then(e=>e?this.fetchFrequentlyBoughtProducts(e):[]).then(()=>{this.renderProductList(),setTimeout(()=>{this.initializeSlider()},1e3)}).catch(e=>{console.error("[CartAddonsSlider] Error loading products:",e)})}ensureStructure(){if(this.structureReady)return;let e=this.getTitleText(),t=this.querySelector(".cart-addons-title");if(t)t.textContent=e;else{let r=document.createElement("h3");r.className="cart-addons-title",r.textContent=e,this.appendChild(r)}if(!this.querySelector(".frequently-bought-container")){let r=document.createElement("div");r.className="frequently-bought-container",this.appendChild(r)}this.structureReady=!0}getTitleText(){let e="pages.cart.frequently_bought_together",t=window.salla?.lang?.get?.(e),r=typeof t=="string"&&t!==e?t.trim():"";if(r)return r;let s=(document.documentElement.getAttribute("lang")||"").toLowerCase().slice(0,2),i={ar:"\u0645\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643",en:"Frequently Bought Together"};return i[s]||i.en}async getHighestValueItemFromDOM(){try{let e=document.querySelectorAll('form[id^="item-"]');if(!e||e.length===0)return console.log("[CartAddonsSlider] No cart items found in DOM"),null;let t=null,r=0;return e.forEach(s=>{try{let i=s.getAttribute("id")||"",o=i.replace("item-",""),l=s.querySelector('a[href*="/p"]');if(!l){console.log("[CartAddonsSlider] No product link found in form",i);return}let a=l.getAttribute("href"),d=a.match(/\/p(\d+)(?:$|\/|\?)/);if(!d||!d[1]){console.log("[CartAddonsSlider] Could not extract product ID from URL",a);return}let n=d[1],h=s.querySelector(".item-total");if(h){let g=(h.textContent||h.innerText||"0").replace(/[^\d.,٠١٢٣٤٥٦٧٨٩]/g,"").replace(/٠/g,"0").replace(/١/g,"1").replace(/٢/g,"2").replace(/٣/g,"3").replace(/٤/g,"4").replace(/٥/g,"5").replace(/٦/g,"6").replace(/٧/g,"7").replace(/٨/g,"8").replace(/٩/g,"9"),f=parseFloat(g.replace(",","."))||0;console.log(`[CartAddonsSlider] Item ${o}: Product ID ${n}, Total: ${f}`),!isNaN(f)&&f>r&&(r=f,t={itemId:o,productId:n,total:f})}}catch(i){console.error("[CartAddonsSlider] Error processing item form:",i)}}),t?(console.log("[CartAddonsSlider] Highest value item:",t),t.productId):null}catch(e){return console.error("[CartAddonsSlider] Error extracting cart data from DOM:",e),null}}async fetchFrequentlyBoughtProducts(e){try{console.log("[CartAddonsSlider] Fetching frequently bought products for:",e);let t=await p.getFrequentlyBought(e);return t&&t.length>0?(console.log("[CartAddonsSlider] Found frequently bought products:",t),this.productIds=t.map(r=>String(r)).slice(0,8),this.productIds):(console.log("[CartAddonsSlider] No frequently bought products found"),this.productIds=[],[])}catch(t){return console.error("[CartAddonsSlider] Error fetching frequently bought products:",t),this.productIds=[],[]}}renderProductList(){if(!this.productIds||this.productIds.length===0){console.log("[CartAddonsSlider] No products to render, hiding component"),this.style.display="none";return}console.log("[CartAddonsSlider] Rendering product list with IDs:",this.productIds);let e=this.querySelector(".frequently-bought-container");if(!e){console.error("[CartAddonsSlider] Container not found");return}let t=document.createElement("salla-products-list");if(t.setAttribute("source","selected"),t.setAttribute("loading","lazy"),t.setAttribute("source-value",JSON.stringify(this.productIds)),t.setAttribute("class","s-products-list-vertical-cards"),e.innerHTML="",e.appendChild(t),!this.querySelector(".touch-indicator")){let r=document.createElement("div");r.classList.add("touch-indicator"),this.appendChild(r)}console.log("[CartAddonsSlider] Product list rendered")}initializeSlider(){try{let e=this.querySelector("salla-products-list");if(!e){console.log("[CartAddonsSlider] Products list not found");return}e.style.opacity="1",window.salla?.event?.dispatch&&window.salla.event.dispatch("twilight::mutation"),this.initialized=!0,console.log("[CartAddonsSlider] Slider initialized")}catch(e){console.error("[CartAddonsSlider] Failed to initialize cart addons slider:",e)}}};customElements.get("cart-addons-slider")||(customElements.define("cart-addons-slider",A),console.log("[CartAddonsSlider] Custom element defined"));var D=class extends HTMLElement{constructor(){super(),this.swiper=null,this.productIds=[],this.initialized=!1}async initialize(e,t={}){if(this.initialized){console.warn("[AlgoliaSlider] Already initialized");return}this.productIds=e.slice(0,21);let{title:r="\u0645\u0646\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643",displayAllUrl:s="",filterStock:i=!0,maxInStock:o=15}=t;this.innerHTML=`
+(() => {
+  // services/redis-service.js
+  var RedisService = class {
+    constructor() {
+      this.baseUrl = "https://me-central2-gtm-5v2mhn4-mwvlm.cloudfunctions.net/function-2";
+      this.maxRetries = 2;
+      this.headers = {
+        "Accept": "application/json",
+        "Cache-Control": "public, max-age=3600"
+      };
+      this.cache = /* @__PURE__ */ new Map();
+      this.fallbackEnabled = true;
+    }
+    async getProducts(type, id, offset = 0, limit = 12) {
+      if (!id) return null;
+      const cacheKey = `${type}:${id}:${offset}:${limit}`;
+      if (this.cache.has(cacheKey)) {
+        return this.cache.get(cacheKey);
+      }
+      const param = type === "category" ? "catID" : "tagID";
+      const endpoint = type === "category" ? "categoryById" : "tagById";
+      const url = `${this.baseUrl}/?type=${endpoint}&${param}=${encodeURIComponent(id)}&offset=${offset}&limit=${limit}`;
+      let data = null;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 2e3);
+        const response = await fetch(url, {
+          method: "GET",
+          headers: this.headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          throw new Error(`HTTP error: ${response.status}`);
+        }
+        data = await response.json();
+        if (data?.objectIDs?.length) {
+          this.cache.set(cacheKey, data);
+          return data;
+        }
+      } catch (error) {
+      }
+      if (!data?.objectIDs?.length && this.fallbackEnabled) {
+        try {
+          const response = await fetch(url, {
+            method: "GET",
+            headers: this.headers
+          });
+          if (response.ok) {
+            data = await response.json();
+            if (data?.objectIDs?.length) {
+              this.cache.set(cacheKey, data);
+              return data;
+            }
+          }
+        } catch (retryError) {
+        }
+      }
+      return data || { objectIDs: [], hasMore: false };
+    }
+    async getRecommendations(productId) {
+      if (!productId) return [];
+      const cacheKey = `recommendations:${productId}`;
+      if (this.cache.has(cacheKey)) {
+        return this.cache.get(cacheKey);
+      }
+      const url = `${this.baseUrl}/?type=recommendations&objectID=${encodeURIComponent(productId)}`;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3e3);
+        const response = await fetch(url, {
+          method: "GET",
+          headers: this.headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) return [];
+        const data = await response.json();
+        const recommendations = Array.isArray(data?.relatedProductIDs) ? data.relatedProductIDs : [];
+        this.cache.set(cacheKey, recommendations);
+        return recommendations;
+      } catch {
+        return [];
+      }
+    }
+    async getFrequentlyBought(productId) {
+      if (!productId) return [];
+      const cacheKey = `frequently-bought:${productId}`;
+      if (this.cache.has(cacheKey)) {
+        return this.cache.get(cacheKey);
+      }
+      const url = `${this.baseUrl}/?type=frequentlyBought&objectID=${encodeURIComponent(productId)}`;
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3e3);
+        const response = await fetch(url, {
+          method: "GET",
+          headers: this.headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) return [];
+        const data = await response.json();
+        const frequentlyBought = Array.isArray(data?.frequentlyBoughtIDs) ? data.frequentlyBoughtIDs : [];
+        this.cache.set(cacheKey, frequentlyBought);
+        return frequentlyBought;
+      } catch {
+        return [];
+      }
+    }
+    async getCategoriesFromRedis() {
+      const cacheKey = "all-categories";
+      if (this.cache.has(cacheKey)) {
+        return this.cache.get(cacheKey);
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 5e3);
+        const response = await fetch(`${this.baseUrl}/?type=categories`, {
+          method: "GET",
+          headers: this.headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          return [];
+        }
+        const data = await response.json();
+        const categories = data.categories || [];
+        this.cache.set(cacheKey, categories);
+        return categories;
+      } catch (error) {
+        return [];
+      }
+    }
+    async getGlobalProducts(offset = 0, limit = 12) {
+      const cacheKey = `global-products:${offset}:${limit}`;
+      if (this.cache.has(cacheKey)) {
+        return this.cache.get(cacheKey);
+      }
+      try {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 3e3);
+        const url = `${this.baseUrl}/?type=categoryById&catID=trending-now&offset=${offset}&limit=${limit}`;
+        const response = await fetch(url, {
+          method: "GET",
+          headers: this.headers,
+          signal: controller.signal
+        });
+        clearTimeout(timeoutId);
+        if (!response.ok) {
+          return { objectIDs: [], hasMore: false };
+        }
+        const data = await response.json();
+        const result = {
+          objectIDs: data.objectIDs || [],
+          hasMore: data.hasMore || false
+        };
+        this.cache.set(cacheKey, result);
+        return result;
+      } catch (error) {
+        return { objectIDs: [], hasMore: false };
+      }
+    }
+    async getCategoryPageById(categoryId, offset = 0, limit = 12) {
+      return this.getProducts("category", categoryId, offset, limit);
+    }
+    async getCategoryProducts(categoryId, offset, limit) {
+      return this.getProducts("category", categoryId, offset, limit);
+    }
+    async getTagProducts(tagId, offset, limit) {
+      return this.getProducts("tag", tagId, offset, limit);
+    }
+  };
+  var redisService = new RedisService();
+
+  // components/CartAddonsSlider.js
+  var CartAddonsSlider = class extends HTMLElement {
+    constructor() {
+      super();
+      this.initialized = false;
+      this.productIds = [];
+      this.structureReady = false;
+      this.cartListenerBound = false;
+      this.reloadScheduled = false;
+      this.reloadTimer = null;
+    }
+    /**
+     * Check if we're on the cart page
+     */
+    isCartPage() {
+      return window.location.pathname.includes("/cart") && document.querySelector('form[id^="item-"]') !== null;
+    }
+    /**
+     * Debounced page reload after cart item added
+     */
+    scheduleReload() {
+      if (!this.isCartPage()) return;
+      if (this.reloadScheduled) return;
+      this.reloadScheduled = true;
+      if (this.reloadTimer) {
+        clearTimeout(this.reloadTimer);
+      }
+      this.reloadTimer = setTimeout(() => {
+        console.log("[CartAddonsSlider] Reloading cart page to show added item");
+        window.location.reload();
+      }, 1e3);
+    }
+    /**
+     * Setup listeners for cart add success events
+     * Only activates on cart page
+     */
+    setupCartRefreshListener() {
+      if (this.cartListenerBound) return;
+      if (!this.isCartPage()) return;
+      this.cartListenerBound = true;
+      const handler = () => this.scheduleReload();
+      if (window.salla?.cart?.event?.onItemAdded) {
+        window.salla.cart.event.onItemAdded(() => this.scheduleReload());
+        console.log("[CartAddonsSlider] Listening to salla.cart.event.onItemAdded()");
+      }
+      document.addEventListener("salla::cart::item.added", handler);
+      console.log("[CartAddonsSlider] Listening to salla::cart::item.added");
+    }
+    connectedCallback() {
+      this.ensureStructure();
+      this.setupCartRefreshListener();
+      if (this.initialized) return;
+      this.getHighestValueItemFromDOM().then((productId) => {
+        if (productId) {
+          return this.fetchFrequentlyBoughtProducts(productId);
+        }
+        return [];
+      }).then(() => {
+        this.renderProductList();
+        setTimeout(() => {
+          this.initializeSlider();
+        }, 1e3);
+      }).catch((error) => {
+        console.error("[CartAddonsSlider] Error loading products:", error);
+      });
+    }
+    ensureStructure() {
+      if (this.structureReady) return;
+      const titleText = this.getTitleText();
+      const existingTitle = this.querySelector(".cart-addons-title");
+      if (existingTitle) {
+        existingTitle.textContent = titleText;
+      } else {
+        const title = document.createElement("h3");
+        title.className = "cart-addons-title";
+        title.textContent = titleText;
+        this.appendChild(title);
+      }
+      if (!this.querySelector(".frequently-bought-container")) {
+        const container = document.createElement("div");
+        container.className = "frequently-bought-container";
+        this.appendChild(container);
+      }
+      this.structureReady = true;
+    }
+    getTitleText() {
+      const translationKey = "pages.cart.frequently_bought_together";
+      const localizedTitle = window.salla?.lang?.get?.(translationKey);
+      const cleanedLocalizedTitle = typeof localizedTitle === "string" && localizedTitle !== translationKey ? localizedTitle.trim() : "";
+      if (cleanedLocalizedTitle) {
+        return cleanedLocalizedTitle;
+      }
+      const language = (document.documentElement.getAttribute("lang") || "").toLowerCase().slice(0, 2);
+      const fallbackTitles = {
+        ar: "\u0645\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643",
+        en: "Frequently Bought Together"
+      };
+      return fallbackTitles[language] || fallbackTitles.en;
+    }
+    async getHighestValueItemFromDOM() {
+      try {
+        const cartItemForms = document.querySelectorAll('form[id^="item-"]');
+        if (!cartItemForms || cartItemForms.length === 0) {
+          console.log("[CartAddonsSlider] No cart items found in DOM");
+          return null;
+        }
+        let highestValueItem = null;
+        let highestValue = 0;
+        cartItemForms.forEach((form) => {
+          try {
+            const formId = form.getAttribute("id") || "";
+            const itemId = formId.replace("item-", "");
+            const productLink = form.querySelector('a[href*="/p"]');
+            if (!productLink) {
+              console.log("[CartAddonsSlider] No product link found in form", formId);
+              return;
+            }
+            const productUrl = productLink.getAttribute("href");
+            const productIdMatch = productUrl.match(/\/p(\d+)(?:$|\/|\?)/);
+            if (!productIdMatch || !productIdMatch[1]) {
+              console.log("[CartAddonsSlider] Could not extract product ID from URL", productUrl);
+              return;
+            }
+            const productId = productIdMatch[1];
+            const totalElement = form.querySelector(".item-total");
+            if (totalElement) {
+              const totalText = totalElement.textContent || totalElement.innerText || "0";
+              const cleanedText = totalText.replace(/[^\d.,٠١٢٣٤٥٦٧٨٩]/g, "").replace(/٠/g, "0").replace(/١/g, "1").replace(/٢/g, "2").replace(/٣/g, "3").replace(/٤/g, "4").replace(/٥/g, "5").replace(/٦/g, "6").replace(/٧/g, "7").replace(/٨/g, "8").replace(/٩/g, "9");
+              const totalValue = parseFloat(cleanedText.replace(",", ".")) || 0;
+              console.log(`[CartAddonsSlider] Item ${itemId}: Product ID ${productId}, Total: ${totalValue}`);
+              if (!isNaN(totalValue) && totalValue > highestValue) {
+                highestValue = totalValue;
+                highestValueItem = {
+                  itemId,
+                  productId,
+                  total: totalValue
+                };
+              }
+            }
+          } catch (err) {
+            console.error("[CartAddonsSlider] Error processing item form:", err);
+          }
+        });
+        if (highestValueItem) {
+          console.log("[CartAddonsSlider] Highest value item:", highestValueItem);
+          return highestValueItem.productId;
+        }
+        return null;
+      } catch (error) {
+        console.error("[CartAddonsSlider] Error extracting cart data from DOM:", error);
+        return null;
+      }
+    }
+    async fetchFrequentlyBoughtProducts(productId) {
+      try {
+        console.log("[CartAddonsSlider] Fetching frequently bought products for:", productId);
+        const productIds = await redisService.getFrequentlyBought(productId);
+        if (productIds && productIds.length > 0) {
+          console.log("[CartAddonsSlider] Found frequently bought products:", productIds);
+          this.productIds = productIds.map((id) => String(id)).slice(0, 8);
+          return this.productIds;
+        } else {
+          console.log("[CartAddonsSlider] No frequently bought products found");
+          this.productIds = [];
+          return [];
+        }
+      } catch (error) {
+        console.error("[CartAddonsSlider] Error fetching frequently bought products:", error);
+        this.productIds = [];
+        return [];
+      }
+    }
+    renderProductList() {
+      if (!this.productIds || this.productIds.length === 0) {
+        console.log("[CartAddonsSlider] No products to render, hiding component");
+        this.style.display = "none";
+        return;
+      }
+      console.log("[CartAddonsSlider] Rendering product list with IDs:", this.productIds);
+      const container = this.querySelector(".frequently-bought-container");
+      if (!container) {
+        console.error("[CartAddonsSlider] Container not found");
+        return;
+      }
+      const productsList = document.createElement("salla-products-list");
+      productsList.setAttribute("source", "selected");
+      productsList.setAttribute("loading", "lazy");
+      productsList.setAttribute("source-value", JSON.stringify(this.productIds));
+      productsList.setAttribute("class", "s-products-list-vertical-cards");
+      container.innerHTML = "";
+      container.appendChild(productsList);
+      if (!this.querySelector(".touch-indicator")) {
+        const touchIndicator = document.createElement("div");
+        touchIndicator.classList.add("touch-indicator");
+        this.appendChild(touchIndicator);
+      }
+      console.log("[CartAddonsSlider] Product list rendered");
+    }
+    initializeSlider() {
+      try {
+        const productsList = this.querySelector("salla-products-list");
+        if (!productsList) {
+          console.log("[CartAddonsSlider] Products list not found");
+          return;
+        }
+        productsList.style.opacity = "1";
+        if (window.salla?.event?.dispatch) {
+          window.salla.event.dispatch("twilight::mutation");
+        }
+        this.initialized = true;
+        console.log("[CartAddonsSlider] Slider initialized");
+      } catch (error) {
+        console.error("[CartAddonsSlider] Failed to initialize cart addons slider:", error);
+      }
+    }
+  };
+  if (!customElements.get("cart-addons-slider")) {
+    customElements.define("cart-addons-slider", CartAddonsSlider);
+    console.log("[CartAddonsSlider] Custom element defined");
+  }
+
+  // components/AlgoliaRecommendationsSlider.js
+  var AlgoliaRecommendationsSlider = class extends HTMLElement {
+    constructor() {
+      super();
+      this.swiper = null;
+      this.productIds = [];
+      this.initialized = false;
+    }
+    /**
+     * Initialize the slider with product IDs from Algolia
+     * @param {Array<number>} productIds - Array of product IDs in exact Algolia order
+     * @param {Object} config - Configuration options
+     */
+    async initialize(productIds, config = {}) {
+      if (this.initialized) {
+        console.warn("[AlgoliaSlider] Already initialized");
+        return;
+      }
+      this.productIds = productIds.slice(0, 21);
+      const {
+        title = "\u0645\u0646\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643",
+        displayAllUrl = "",
+        filterStock = true,
+        maxInStock = 15
+      } = config;
+      this.innerHTML = `
             <div class="algolia-slider-wrapper s-products-slider-wrapper">
                 <div class="algolia-slider-header s-slider-block__title">
                     <div class="s-slider-block__title-right">
-                        <h2>${r}</h2>
+                        <h2>${title}</h2>
                     </div>
                     <div class="s-slider-block__title-left">
                         <div class="s-slider-block__title-nav" dir="rtl">
@@ -39,14 +461,204 @@
                     </div>
                 </div>
             </div>
-        `,this.injectStyles(),await this.renderProducts(i,o),this.initialized=!0}async renderProducts(e,t){let r=this.querySelector(".swiper-wrapper");if(!r){console.error("[AlgoliaSlider] Swiper wrapper not found");return}let s=document.createElement("salla-products-list");s.setAttribute("source","selected"),s.setAttribute("source-value",JSON.stringify(this.productIds)),s.setAttribute("limit",this.productIds.length.toString()),s.setAttribute("display-all-url",""),s.className="algolia-products-source";let i=document.createElement("div");return i.style.cssText="opacity: 0; pointer-events: none; position: absolute; z-index: -1; top: 0; left: 0; width: 100%; height: 0; overflow: hidden;",i.className="algolia-temp-container",i.appendChild(s),this.appendChild(i),window.salla?.event?.dispatch("twilight::mutation"),new Promise(o=>{let l=a=>{s.contains(a.target)&&(window.salla?.event?.off("salla-products-list::products.fetched",l),setTimeout(()=>{this.moveProductsToSlider(s,r,e,t),i.remove(),o()},150))};window.salla?.event?.on("salla-products-list::products.fetched",l),setTimeout(()=>{i.parentNode&&(this.moveProductsToSlider(s,r,e,t),i.remove(),o())},3e3)})}moveProductsToSlider(e,t,r,s){let i=e.querySelectorAll(".s-product-card-entry, custom-salla-product-card");if(!i.length){console.warn("[AlgoliaSlider] No product cards found");return}console.log(`[AlgoliaSlider] Found ${i.length} products from Salla`);let o=new Map;i.forEach(a=>{let d=a.getAttribute("id")||a.id;if(d){let n=d.replace("product-","");o.set(n.toString(),a)}}),console.log("[AlgoliaSlider] Card map keys:",Array.from(o.keys())),console.log("[AlgoliaSlider] Target order from Algolia:",this.productIds);let l=0;this.productIds.forEach((a,d)=>{let n=o.get(a.toString());if(!n){console.warn(`[AlgoliaSlider] Product ${a} not found in rendered cards`);return}let h=n.classList.contains("s-product-card-out-of-stock");if(r&&(h||l>=s))return;h||l++;let u=document.createElement("div");u.className="s-products-slider-card swiper-slide",u.appendChild(n),t.appendChild(u),console.log(`[AlgoliaSlider] Added product ${a} at position ${d}`)}),console.log(`[AlgoliaSlider] Final order: ${l} in-stock products in Algolia order`),this.initializeSwiper()}initializeSwiper(){let e=this.querySelector(".swiper");if(!e){console.error("[AlgoliaSlider] Swiper container not found");return}if(!this.querySelectorAll(".swiper-slide").length){console.warn("[AlgoliaSlider] No slides to initialize");return}if(typeof Swiper>"u"){console.warn("[AlgoliaSlider] Swiper not available, using CSS fallback"),this.initializeCSSScroll();return}try{this.swiper=new Swiper(e,{slidesPerView:"auto",spaceBetween:16,rtl:!0,direction:"horizontal",navigation:{nextEl:".algolia-slider-next",prevEl:".algolia-slider-prev"},breakpoints:{320:{slidesPerView:2,spaceBetween:12},640:{slidesPerView:2,spaceBetween:12},768:{slidesPerView:3,spaceBetween:16},1024:{slidesPerView:4,spaceBetween:16}},on:{init:function(){console.log("[AlgoliaSlider] Swiper initialized successfully")}}}),console.log("[AlgoliaSlider] Swiper instance created")}catch(r){console.error("[AlgoliaSlider] Error initializing Swiper:",r),this.initializeCSSScroll()}}initializeCSSScroll(){let e=this.querySelector(".swiper-wrapper");if(!e)return;e.style.cssText=`
+        `;
+      this.injectStyles();
+      await this.renderProducts(filterStock, maxInStock);
+      this.initialized = true;
+    }
+    /**
+     * Use salla-products-list to fetch and render products
+     */
+    async renderProducts(filterStock, maxInStock) {
+      const wrapper = this.querySelector(".swiper-wrapper");
+      if (!wrapper) {
+        console.error("[AlgoliaSlider] Swiper wrapper not found");
+        return;
+      }
+      const productsList = document.createElement("salla-products-list");
+      productsList.setAttribute("source", "selected");
+      productsList.setAttribute("source-value", JSON.stringify(this.productIds));
+      productsList.setAttribute("limit", this.productIds.length.toString());
+      productsList.setAttribute("display-all-url", "");
+      productsList.className = "algolia-products-source";
+      const tempContainer = document.createElement("div");
+      tempContainer.style.cssText = "opacity: 0; pointer-events: none; position: absolute; z-index: -1; top: 0; left: 0; width: 100%; height: 0; overflow: hidden;";
+      tempContainer.className = "algolia-temp-container";
+      tempContainer.appendChild(productsList);
+      this.appendChild(tempContainer);
+      window.salla?.event?.dispatch("twilight::mutation");
+      return new Promise((resolve) => {
+        const handler = (event) => {
+          if (!productsList.contains(event.target)) return;
+          window.salla?.event?.off("salla-products-list::products.fetched", handler);
+          setTimeout(() => {
+            this.moveProductsToSlider(productsList, wrapper, filterStock, maxInStock);
+            tempContainer.remove();
+            resolve();
+          }, 150);
+        };
+        window.salla?.event?.on("salla-products-list::products.fetched", handler);
+        setTimeout(() => {
+          if (tempContainer.parentNode) {
+            this.moveProductsToSlider(productsList, wrapper, filterStock, maxInStock);
+            tempContainer.remove();
+            resolve();
+          }
+        }, 3e3);
+      });
+    }
+    /**
+     * Extract product cards from salla-products-list and move to swiper
+     * IMPORTANT: We MOVE nodes instead of cloning to preserve web component state
+     */
+    moveProductsToSlider(productsList, swiperWrapper, filterStock, maxInStock) {
+      const productCards = productsList.querySelectorAll(".s-product-card-entry, custom-salla-product-card");
+      if (!productCards.length) {
+        console.warn("[AlgoliaSlider] No product cards found");
+        return;
+      }
+      console.log(`[AlgoliaSlider] Found ${productCards.length} products from Salla`);
+      const cardMap = /* @__PURE__ */ new Map();
+      productCards.forEach((card) => {
+        const productId = card.getAttribute("id") || card.id;
+        if (productId) {
+          const numericId = productId.replace("product-", "");
+          cardMap.set(numericId.toString(), card);
+        }
+      });
+      console.log("[AlgoliaSlider] Card map keys:", Array.from(cardMap.keys()));
+      console.log("[AlgoliaSlider] Target order from Algolia:", this.productIds);
+      let inStockCount = 0;
+      this.productIds.forEach((productId, index) => {
+        const card = cardMap.get(productId.toString());
+        if (!card) {
+          console.warn(`[AlgoliaSlider] Product ${productId} not found in rendered cards`);
+          return;
+        }
+        const isOutOfStock = card.classList.contains("s-product-card-out-of-stock");
+        if (filterStock && (isOutOfStock || inStockCount >= maxInStock)) {
+          return;
+        }
+        if (!isOutOfStock) {
+          inStockCount++;
+        }
+        const slide = document.createElement("div");
+        slide.className = "s-products-slider-card swiper-slide";
+        slide.appendChild(card);
+        swiperWrapper.appendChild(slide);
+        console.log(`[AlgoliaSlider] Added product ${productId} at position ${index}`);
+      });
+      console.log(`[AlgoliaSlider] Final order: ${inStockCount} in-stock products in Algolia order`);
+      this.initializeSwiper();
+    }
+    /**
+     * Initialize Swiper.js slider
+     */
+    initializeSwiper() {
+      const swiperContainer = this.querySelector(".swiper");
+      if (!swiperContainer) {
+        console.error("[AlgoliaSlider] Swiper container not found");
+        return;
+      }
+      const slides = this.querySelectorAll(".swiper-slide");
+      if (!slides.length) {
+        console.warn("[AlgoliaSlider] No slides to initialize");
+        return;
+      }
+      if (typeof Swiper === "undefined") {
+        console.warn("[AlgoliaSlider] Swiper not available, using CSS fallback");
+        this.initializeCSSScroll();
+        return;
+      }
+      try {
+        this.swiper = new Swiper(swiperContainer, {
+          slidesPerView: "auto",
+          spaceBetween: 16,
+          rtl: true,
+          direction: "horizontal",
+          navigation: {
+            nextEl: ".algolia-slider-next",
+            prevEl: ".algolia-slider-prev"
+          },
+          breakpoints: {
+            320: {
+              slidesPerView: 2,
+              spaceBetween: 12
+            },
+            640: {
+              slidesPerView: 2,
+              spaceBetween: 12
+            },
+            768: {
+              slidesPerView: 3,
+              spaceBetween: 16
+            },
+            1024: {
+              slidesPerView: 4,
+              spaceBetween: 16
+            }
+          },
+          on: {
+            init: function() {
+              console.log("[AlgoliaSlider] Swiper initialized successfully");
+            }
+          }
+        });
+        console.log("[AlgoliaSlider] Swiper instance created");
+      } catch (error) {
+        console.error("[AlgoliaSlider] Error initializing Swiper:", error);
+        this.initializeCSSScroll();
+      }
+    }
+    /**
+     * Fallback CSS-based horizontal scroll if Swiper unavailable
+     */
+    initializeCSSScroll() {
+      const wrapper = this.querySelector(".swiper-wrapper");
+      if (!wrapper) return;
+      wrapper.style.cssText = `
             display: flex !important;
             overflow-x: auto;
             scroll-behavior: smooth;
             gap: 1rem;
             -webkit-overflow-scrolling: touch;
             scrollbar-width: thin;
-        `;let t=this.querySelector(".swiper");t&&(t.style.overflow="hidden");let r=this.querySelector(".algolia-slider-prev"),s=this.querySelector(".algolia-slider-next");if(r&&s){r.addEventListener("click",()=>{e.scrollBy({left:-300,behavior:"smooth"})}),s.addEventListener("click",()=>{e.scrollBy({left:300,behavior:"smooth"})});let o=()=>{let l=e.scrollLeft<=0,a=e.scrollLeft>=e.scrollWidth-e.clientWidth-10;r.disabled=l,s.disabled=a,r.classList.toggle("swiper-button-disabled",l),s.classList.toggle("swiper-button-disabled",a)};e.addEventListener("scroll",o),o()}console.log("[AlgoliaSlider] CSS scroll fallback initialized")}injectStyles(){if(document.getElementById("algolia-slider-styles"))return;let e=document.createElement("style");e.id="algolia-slider-styles",e.textContent=`
+        `;
+      const container = this.querySelector(".swiper");
+      if (container) {
+        container.style.overflow = "hidden";
+      }
+      const prevBtn = this.querySelector(".algolia-slider-prev");
+      const nextBtn = this.querySelector(".algolia-slider-next");
+      if (prevBtn && nextBtn) {
+        const scrollAmount = 300;
+        prevBtn.addEventListener("click", () => {
+          wrapper.scrollBy({ left: -scrollAmount, behavior: "smooth" });
+        });
+        nextBtn.addEventListener("click", () => {
+          wrapper.scrollBy({ left: scrollAmount, behavior: "smooth" });
+        });
+        const updateButtons = () => {
+          const isAtStart = wrapper.scrollLeft <= 0;
+          const isAtEnd = wrapper.scrollLeft >= wrapper.scrollWidth - wrapper.clientWidth - 10;
+          prevBtn.disabled = isAtStart;
+          nextBtn.disabled = isAtEnd;
+          prevBtn.classList.toggle("swiper-button-disabled", isAtStart);
+          nextBtn.classList.toggle("swiper-button-disabled", isAtEnd);
+        };
+        wrapper.addEventListener("scroll", updateButtons);
+        updateButtons();
+      }
+      console.log("[AlgoliaSlider] CSS scroll fallback initialized");
+    }
+    /**
+     * Inject slider styles
+     */
+    injectStyles() {
+      if (document.getElementById("algolia-slider-styles")) return;
+      const styleEl = document.createElement("style");
+      styleEl.id = "algolia-slider-styles";
+      styleEl.textContent = `
             /* Match Salla's slider styling exactly */
             .algolia-slider-wrapper {
                 margin: 2rem 0;
@@ -158,15 +770,402 @@
             .algolia-recently-viewed {
                 margin-top: 2rem;
             }
-        `,document.head.appendChild(e),console.log("[AlgoliaSlider] Styles injected")}disconnectedCallback(){this.destroy()}destroy(){if(this.swiper){try{this.swiper.destroy(!0,!0),console.log("[AlgoliaSlider] Swiper destroyed")}catch(e){console.error("[AlgoliaSlider] Error destroying Swiper:",e)}this.swiper=null}this.initialized=!1}};customElements.get("algolia-recommendations-slider")||(customElements.define("algolia-recommendations-slider",D),console.log("[AlgoliaSlider] Custom element registered"));var E=class extends HTMLElement{constructor(){super(),this.page=0,this.loading=!1,this.hasMore=!0,this.ids=[],this.container=null,this.originalList=null,this.usingSallaFilter=!1,this.timeout=null}async connectedCallback(){let e=this.getAttribute("category-id"),t=this.getAttribute("tag-id");if(console.log("[PR Element] Connected:",{categoryId:e,tagId:t}),!(!e&&!t))try{await this.waitForSalla(),this.setupFilterListener(),await this.initialize(e,t)}catch(r){console.error("[PR Element] Error:",r),this.restoreOriginalList()}}restoreOriginalList(){if(!this.originalList||this.usingSallaFilter)return;let e=document.querySelector(".ranked-products, salla-products-list[filter]"),t=e?.parentNode||this.originalList.parentNode;e&&e.remove(),this.container&&(this.container.remove(),this.container=null),t&&!t.querySelector("salla-products-list")&&(t.appendChild(this.originalList.cloneNode(!0)),window.salla?.event?.dispatch("twilight::mutation"))}setupFilterListener(){document.addEventListener("change",e=>{if(e.target.id!=="product-filter")return;let t=e.target.value;t==="ourSuggest"&&this.usingSallaFilter?this.applyRedisRanking():t!=="ourSuggest"&&this.applySallaFilter(t)})}async applySallaFilter(e){let t=this.getAttribute("category-id"),r=this.getAttribute("tag-id");if(!this.originalList)return;let s=document.querySelector(".ranked-products, salla-products-list[filter]"),i=s?.parentNode||this.container?.parentNode;if(!i)return;s&&s.remove(),this.container&&(this.container.remove(),this.container=null),this.cleanupScrollListener(),this.usingSallaFilter=!0;let o=this.originalList.cloneNode(!0);o.setAttribute("filter",e),i.appendChild(o),window.salla?.event?.dispatch("twilight::mutation")}async applyRedisRanking(){let e=this.getAttribute("category-id"),t=this.getAttribute("tag-id");this.usingSallaFilter=!1,await this.initialize(e,t,!0)}async initialize(e,t,r=!1){if(console.log("[PR Element] Initialize called"),this.container&&!this.usingSallaFilter&&!r)return;let s=e?'salla-products-list[source="product.index"], salla-products-list[source="categories"]':'salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]',i=document.querySelector(s);if(console.log("[PR Element] Existing list found:",!!i),!i)return;this.originalList||(this.originalList=i.cloneNode(!0));let o=document.getElementById("product-filter");if(o)o.value="ourSuggest",this.usingSallaFilter=!1;else if(o&&o.value!=="ourSuggest"&&!r){this.usingSallaFilter=!0;return}let l=e?p.getCategoryProducts(e,0,12):p.getTagProducts(t,0,12),a=i.parentNode;this.container=document.createElement("div"),this.container.className="ranked-products",a.insertBefore(this.container,i),clearTimeout(this.timeout),this.timeout=setTimeout(()=>{(!this.ids||!this.ids.length)&&this.restoreOriginalList()},2500);let d=await l;if(clearTimeout(this.timeout),console.log("[PR Element] Redis data received:",d?.objectIDs?.length,"products"),console.log("[PR Element] Redis product IDs:",d.objectIDs),!d?.objectIDs?.length){console.warn("[PR Element] No products from Redis, restoring original"),this.restoreOriginalList();return}this.ids=d.objectIDs,this.page=0,this.hasMore=!0,this.usingSallaFilter=!1;let n=document.createElement("salla-products-list");n.setAttribute("source","selected"),n.setAttribute("source-value",JSON.stringify(this.ids)),n.setAttribute("limit",this.ids.length),n.className=i.className||"w-full",this.container.appendChild(n),i.remove(),window.salla?.event?.dispatch("twilight::mutation"),this.applyOrderToList(this.container,this.ids),this.setupScrollListener()}setupScrollListener(){this.cleanupScrollListener(),this._boundScrollHandler=this.handleScroll.bind(this),window.addEventListener("scroll",this._boundScrollHandler)}cleanupScrollListener(){this._boundScrollHandler&&(window.removeEventListener("scroll",this._boundScrollHandler),this._boundScrollHandler=null)}handleScroll(){if(this.loading||!this.hasMore||this.usingSallaFilter)return;let e=window.scrollY+window.innerHeight,t=document.documentElement.scrollHeight*.5;e>t&&this.loadMore()}async loadMore(){if(!(this.loading||!this.hasMore)){this.loading=!0;try{let e=this.page+1,t=e*12,r=this.getAttribute("category-id"),s=this.getAttribute("tag-id"),i=r?await p.getCategoryProducts(r,t,12):await p.getTagProducts(s,t,12);if(!i?.objectIDs?.length){this.hasMore=!1;return}let o=document.createElement("salla-products-list");o.setAttribute("source","selected"),o.setAttribute("source-value",JSON.stringify(i.objectIDs)),o.setAttribute("limit",i.objectIDs.length),o.className="w-full",this.container.appendChild(o),this.page=e,this.hasMore=i.hasMore!==!1,window.salla?.event?.dispatch("twilight::mutation"),this.applyOrderToList(o,i.objectIDs)}catch{this.hasMore=!1}finally{this.loading=!1}}}async waitForSalla(){if(!window.salla)return new Promise(e=>{document.addEventListener("salla::ready",e,{once:!0}),setTimeout(e,3e3)})}applyOrderToList(e,t,r=30){if(!e||!t||!t.length)return;let s=0,i=setInterval(()=>{s++;let o=Array.from(e.querySelectorAll("custom-salla-product-card, .s-product-card-entry"));if(o.length>0){clearInterval(i);let l=new Map;o.forEach(d=>{let n=null;if(d.dataset.id)n=d.dataset.id;else if(d.id&&!isNaN(d.id))n=d.id;else{let h=d.querySelector(".s-product-card-image a, .s-product-card-content-title a");if(h?.href){let u=h.href.match(/\/product\/[^\/]+\/(\d+)/);u&&(n=u[1])}}n&&l.set(String(n),d)});let a=o[0].parentNode;if(!a)return;t.forEach(d=>{let n=l.get(String(d));n&&a.contains(n)&&a.appendChild(n)}),console.log("[PR Element] Reordered",o.length,"cards to match Redis order")}else s>=r&&(clearInterval(i),console.warn("[PR Element] Cards never appeared, skipping reorder"))},100)}disconnectedCallback(){this.cleanupScrollListener(),clearTimeout(this.timeout)}};customElements.get("product-ranking")||customElements.define("product-ranking",E);var I=class extends HTMLElement{constructor(){super(),this.state={productsPerPage:30,categories:[],trendingCategory:{name:"\u0631\u0627\u0626\u062C \u0627\u0644\u0627\u0646",slug:"trending-now",filter:null,hasSubcats:!1,url:null}},this.categoriesLoading=!0,this.seenProductIds=new Set}async connectedCallback(){this.innerHTML=`
+        `;
+      document.head.appendChild(styleEl);
+      console.log("[AlgoliaSlider] Styles injected");
+    }
+    /**
+     * Clean up when element is removed
+     */
+    disconnectedCallback() {
+      this.destroy();
+    }
+    /**
+     * Destroy Swiper instance
+     */
+    destroy() {
+      if (this.swiper) {
+        try {
+          this.swiper.destroy(true, true);
+          console.log("[AlgoliaSlider] Swiper destroyed");
+        } catch (error) {
+          console.error("[AlgoliaSlider] Error destroying Swiper:", error);
+        }
+        this.swiper = null;
+      }
+      this.initialized = false;
+    }
+  };
+  if (!customElements.get("algolia-recommendations-slider")) {
+    customElements.define("algolia-recommendations-slider", AlgoliaRecommendationsSlider);
+    console.log("[AlgoliaSlider] Custom element registered");
+  }
+
+  // partials/product-ranking.js
+  var ProductRanking = class extends HTMLElement {
+    constructor() {
+      super();
+      this.page = 0;
+      this.loading = false;
+      this.hasMore = true;
+      this.ids = [];
+      this.container = null;
+      this.originalList = null;
+      this.usingSallaFilter = false;
+      this.timeout = null;
+    }
+    async connectedCallback() {
+      const categoryId = this.getAttribute("category-id");
+      const tagId = this.getAttribute("tag-id");
+      console.log("[PR Element] Connected:", { categoryId, tagId });
+      if (!categoryId && !tagId) return;
+      try {
+        await this.waitForSalla();
+        this.setupFilterListener();
+        await this.initialize(categoryId, tagId);
+      } catch (err) {
+        console.error("[PR Element] Error:", err);
+        this.restoreOriginalList();
+      }
+    }
+    // Restore original list if redis fails
+    restoreOriginalList() {
+      if (!this.originalList || this.usingSallaFilter) return;
+      const currentList = document.querySelector(".ranked-products, salla-products-list[filter]");
+      const parent = currentList?.parentNode || this.originalList.parentNode;
+      if (currentList) currentList.remove();
+      if (this.container) {
+        this.container.remove();
+        this.container = null;
+      }
+      if (parent && !parent.querySelector("salla-products-list")) {
+        parent.appendChild(this.originalList.cloneNode(true));
+        window.salla?.event?.dispatch("twilight::mutation");
+      }
+    }
+    setupFilterListener() {
+      document.addEventListener("change", (e) => {
+        if (e.target.id !== "product-filter") return;
+        const value = e.target.value;
+        if (value === "ourSuggest" && this.usingSallaFilter) {
+          this.applyRedisRanking();
+        } else if (value !== "ourSuggest") {
+          this.applySallaFilter(value);
+        }
+      });
+    }
+    async applySallaFilter(filterValue) {
+      const categoryId = this.getAttribute("category-id");
+      const tagId = this.getAttribute("tag-id");
+      if (!this.originalList) {
+        return;
+      }
+      const currentList = document.querySelector(".ranked-products, salla-products-list[filter]");
+      const parent = currentList?.parentNode || this.container?.parentNode;
+      if (!parent) return;
+      if (currentList) currentList.remove();
+      if (this.container) {
+        this.container.remove();
+        this.container = null;
+      }
+      this.cleanupScrollListener();
+      this.usingSallaFilter = true;
+      const list = this.originalList.cloneNode(true);
+      list.setAttribute("filter", filterValue);
+      parent.appendChild(list);
+      window.salla?.event?.dispatch("twilight::mutation");
+    }
+    async applyRedisRanking() {
+      const categoryId = this.getAttribute("category-id");
+      const tagId = this.getAttribute("tag-id");
+      this.usingSallaFilter = false;
+      await this.initialize(categoryId, tagId, true);
+    }
+    async initialize(categoryId, tagId, force = false) {
+      console.log("[PR Element] Initialize called");
+      if (this.container && !this.usingSallaFilter && !force) return;
+      const selector = categoryId ? 'salla-products-list[source="product.index"], salla-products-list[source="categories"]' : 'salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]';
+      const existingList = document.querySelector(selector);
+      console.log("[PR Element] Existing list found:", !!existingList);
+      if (!existingList) {
+        return;
+      }
+      if (!this.originalList) {
+        this.originalList = existingList.cloneNode(true);
+      }
+      const filter = document.getElementById("product-filter");
+      if (filter) {
+        filter.value = "ourSuggest";
+        this.usingSallaFilter = false;
+      } else if (filter && filter.value !== "ourSuggest" && !force) {
+        this.usingSallaFilter = true;
+        return;
+      }
+      const dataPromise = categoryId ? redisService.getCategoryProducts(categoryId, 0, 12) : redisService.getTagProducts(tagId, 0, 12);
+      const parent = existingList.parentNode;
+      this.container = document.createElement("div");
+      this.container.className = "ranked-products";
+      parent.insertBefore(this.container, existingList);
+      clearTimeout(this.timeout);
+      this.timeout = setTimeout(() => {
+        if (!this.ids || !this.ids.length) {
+          this.restoreOriginalList();
+        }
+      }, 2500);
+      const data = await dataPromise;
+      clearTimeout(this.timeout);
+      console.log("[PR Element] Redis data received:", data?.objectIDs?.length, "products");
+      console.log("[PR Element] Redis product IDs:", data.objectIDs);
+      if (!data?.objectIDs?.length) {
+        console.warn("[PR Element] No products from Redis, restoring original");
+        this.restoreOriginalList();
+        return;
+      }
+      this.ids = data.objectIDs;
+      this.page = 0;
+      this.hasMore = true;
+      this.usingSallaFilter = false;
+      const list = document.createElement("salla-products-list");
+      list.setAttribute("source", "selected");
+      list.setAttribute("source-value", JSON.stringify(this.ids));
+      list.setAttribute("limit", this.ids.length);
+      list.className = existingList.className || "w-full";
+      this.container.appendChild(list);
+      existingList.remove();
+      window.salla?.event?.dispatch("twilight::mutation");
+      this.applyOrderToList(this.container, this.ids);
+      this.setupScrollListener();
+    }
+    setupScrollListener() {
+      this.cleanupScrollListener();
+      this._boundScrollHandler = this.handleScroll.bind(this);
+      window.addEventListener("scroll", this._boundScrollHandler);
+    }
+    cleanupScrollListener() {
+      if (this._boundScrollHandler) {
+        window.removeEventListener("scroll", this._boundScrollHandler);
+        this._boundScrollHandler = null;
+      }
+    }
+    handleScroll() {
+      if (this.loading || !this.hasMore || this.usingSallaFilter) return;
+      const scrolled = window.scrollY + window.innerHeight;
+      const threshold = document.documentElement.scrollHeight * 0.5;
+      if (scrolled > threshold) {
+        this.loadMore();
+      }
+    }
+    async loadMore() {
+      if (this.loading || !this.hasMore) return;
+      this.loading = true;
+      try {
+        const nextPage = this.page + 1;
+        const offset = nextPage * 12;
+        const categoryId = this.getAttribute("category-id");
+        const tagId = this.getAttribute("tag-id");
+        const data = categoryId ? await redisService.getCategoryProducts(categoryId, offset, 12) : await redisService.getTagProducts(tagId, offset, 12);
+        if (!data?.objectIDs?.length) {
+          this.hasMore = false;
+          return;
+        }
+        const list = document.createElement("salla-products-list");
+        list.setAttribute("source", "selected");
+        list.setAttribute("source-value", JSON.stringify(data.objectIDs));
+        list.setAttribute("limit", data.objectIDs.length);
+        list.className = "w-full";
+        this.container.appendChild(list);
+        this.page = nextPage;
+        this.hasMore = data.hasMore !== false;
+        window.salla?.event?.dispatch("twilight::mutation");
+        this.applyOrderToList(list, data.objectIDs);
+      } catch (err) {
+        this.hasMore = false;
+      } finally {
+        this.loading = false;
+      }
+    }
+    async waitForSalla() {
+      if (window.salla) return;
+      return new Promise((resolve) => {
+        document.addEventListener("salla::ready", resolve, { once: true });
+        setTimeout(resolve, 3e3);
+      });
+    }
+    applyOrderToList(container, ids, maxAttempts = 30) {
+      if (!container || !ids || !ids.length) return;
+      let attempt = 0;
+      const intervalId = setInterval(() => {
+        attempt++;
+        const cards = Array.from(container.querySelectorAll(
+          "custom-salla-product-card, .s-product-card-entry"
+        ));
+        if (cards.length > 0) {
+          clearInterval(intervalId);
+          const cardMap = /* @__PURE__ */ new Map();
+          cards.forEach((card) => {
+            let productId = null;
+            if (card.dataset.id) {
+              productId = card.dataset.id;
+            } else if (card.id && !isNaN(card.id)) {
+              productId = card.id;
+            } else {
+              const link = card.querySelector(".s-product-card-image a, .s-product-card-content-title a");
+              if (link?.href) {
+                const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
+                if (match) productId = match[1];
+              }
+            }
+            if (productId) {
+              cardMap.set(String(productId), card);
+            }
+          });
+          const parent = cards[0].parentNode;
+          if (!parent) return;
+          ids.forEach((redisId) => {
+            const card = cardMap.get(String(redisId));
+            if (card && parent.contains(card)) {
+              parent.appendChild(card);
+            }
+          });
+          console.log("[PR Element] Reordered", cards.length, "cards to match Redis order");
+        } else if (attempt >= maxAttempts) {
+          clearInterval(intervalId);
+          console.warn("[PR Element] Cards never appeared, skipping reorder");
+        }
+      }, 100);
+    }
+    disconnectedCallback() {
+      this.cleanupScrollListener();
+      clearTimeout(this.timeout);
+    }
+  };
+  customElements.get("product-ranking") || customElements.define("product-ranking", ProductRanking);
+
+  // partials/category-products.js
+  var CategoryProductsComponent = class extends HTMLElement {
+    constructor() {
+      super();
+      this.state = {
+        productsPerPage: 30,
+        categories: [],
+        trendingCategory: {
+          name: "\u0631\u0627\u0626\u062C \u0627\u0644\u0627\u0646",
+          slug: "trending-now",
+          filter: null,
+          hasSubcats: false,
+          url: null
+        }
+      };
+      this.categoriesLoading = true;
+      this.seenProductIds = /* @__PURE__ */ new Set();
+    }
+    async connectedCallback() {
+      this.innerHTML = `
             <div class="category-filter">
                 <div class="categories-loading">\u062C\u0627\u0631\u0650 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0641\u0626\u0627\u062A...</div>
             </div>
-        `;try{await this.fetchCategoriesFromCloudRun();let e=this.createTemplate();this.innerHTML=e,await this.initializeCategorySections()}catch(e){this.handleInitError(e)}}disconnectedCallback(){}async fetchCategoriesFromCloudRun(){let e={228327271:{name:"\u062C\u0645\u064A\u0639 \u0627\u0644\u0639\u0628\u0627\u064A\u0627\u062A",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA/c228327271"},476899183:{name:"\u062C\u0644\u0627\u0628\u064A\u0627\u062A",url:"https://darlena.com/%D8%AC%D9%84%D8%A7%D8%A8%D9%8A%D8%A7%D8%AA/c476899183"},1466412179:{name:"\u062C\u062F\u064A\u062F\u0646\u0627",url:"https://darlena.com/%D8%AC%D8%AF%D9%8A%D8%AF-%D8%AF%D8%A7%D8%B1-%D9%84%D9%8A%D9%86%D8%A7/c1466412179"},289250285:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0643\u0644\u0648\u0634",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%83%D9%84%D9%88%D8%B4/c289250285"},1891285357:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0633\u0648\u062F\u0627\u0621 \u0633\u0627\u062F\u0629",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B3%D9%88%D8%AF%D8%A7%D8%A1-%D8%B3%D8%A7%D8%AF%D8%A9/c1891285357"},2132455494:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0644\u0648\u0646\u0629",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D9%84%D9%88%D9%86%D8%A9/c2132455494"},940975465:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u062C\u064A\u0648\u0628",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%A8%D8%AC%D9%8A%D9%88%D8%A8/c940975465"},1567146102:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u0634\u062A",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%A8%D8%B4%D8%AA/c1567146102"},832995956:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D8%B7%D8%B1%D8%B2%D8%A9/c832995956"},2031226480:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B1%D8%A3%D8%B3/c2031226480"},270965526:{name:"\u0634\u062A\u0627\u0621 2026",url:"https://darlena.com/%D8%B4%D8%AA%D8%A7%D8%A1-2026/c270965526"},692927841:{name:"\u0637\u0631\u062D",url:"https://darlena.com/%D8%B7%D8%B1%D8%AD/c692927841"},639447590:{name:"\u0646\u0642\u0627\u0628\u0627\u062A",url:"https://darlena.com/%D9%86%D9%82%D8%A7%D8%A8%D8%A7%D8%AA/c639447590"},114756598:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646",url:"https://darlena.com/%D8%B4%D9%8A%D9%81%D9%88%D9%86/c114756598"},273898307:{name:"\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629",url:"https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B4%D8%AA%D9%88%D9%8A%D8%A9/c273898307"}},t={"\u0631\u0627\u0626\u062C \u0627\u0644\u0627\u0646":1,\u062C\u062F\u064A\u062F\u0646\u0627:2,"\u0634\u062A\u0627\u0621 2026":3,"\u062C\u0645\u064A\u0639 \u0627\u0644\u0639\u0628\u0627\u064A\u0627\u062A":4,"\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629":5,"\u0639\u0628\u0627\u064A\u0627\u062A \u0643\u0644\u0648\u0634":6,\u062C\u0644\u0627\u0628\u064A\u0627\u062A:7,"\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646":8,"\u0639\u0628\u0627\u064A\u0627\u062A \u0633\u0648\u062F\u0627\u0621 \u0633\u0627\u062F\u0629":9,"\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u062C\u064A\u0648\u0628":10,"\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u0634\u062A":11,"\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629":12,"\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633":13,"\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0644\u0648\u0646\u0629":14,\u0637\u0631\u062D:15,\u0646\u0642\u0627\u0628\u0627\u062A:16};try{let r=await p.getCategoriesFromRedis();if(!Array.isArray(r))throw new Error("Categories data is not an array");let s=r.map(i=>({slug:i.name,name:i.name,filter:i.name,hasSubcats:!1,count:i.count||0,ids:i.ids||(i.id?[i.id]:[])}));s=s.filter(i=>{if(i.ids.length>0){let o=Number(i.ids[0]);return e.hasOwnProperty(o)}return!1}).map(i=>{let o=Number(i.ids[0]);return{...i,name:e[o].name,slug:e[o].name.toLowerCase().replace(/\s+/g,"-"),url:e[o].url,ids:i.ids}}),s.sort((i,o)=>{let l=t[i.name]||999,a=t[o.name]||999;return l-a}),s.unshift({...this.state.trendingCategory}),this.state.categories=s}catch(r){throw this.state.categories=[{...this.state.trendingCategory}],r}finally{this.categoriesLoading=!1}}createTemplate(){return this.categoriesLoading?`
+        `;
+      try {
+        await this.fetchCategoriesFromCloudRun();
+        const template = this.createTemplate();
+        this.innerHTML = template;
+        await this.initializeCategorySections();
+      } catch (error) {
+        this.handleInitError(error);
+      }
+    }
+    disconnectedCallback() {
+    }
+    async fetchCategoriesFromCloudRun() {
+      const allowedCategories = {
+        228327271: { name: "\u062C\u0645\u064A\u0639 \u0627\u0644\u0639\u0628\u0627\u064A\u0627\u062A", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA/c228327271" },
+        476899183: { name: "\u062C\u0644\u0627\u0628\u064A\u0627\u062A", url: "https://darlena.com/%D8%AC%D9%84%D8%A7%D8%A8%D9%8A%D8%A7%D8%AA/c476899183" },
+        1466412179: { name: "\u062C\u062F\u064A\u062F\u0646\u0627", url: "https://darlena.com/%D8%AC%D8%AF%D9%8A%D8%AF-%D8%AF%D8%A7%D8%B1-%D9%84%D9%8A%D9%86%D8%A7/c1466412179" },
+        289250285: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0643\u0644\u0648\u0634", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%83%D9%84%D9%88%D8%B4/c289250285" },
+        1891285357: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0633\u0648\u062F\u0627\u0621 \u0633\u0627\u062F\u0629", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B3%D9%88%D8%AF%D8%A7%D8%A1-%D8%B3%D8%A7%D8%AF%D8%A9/c1891285357" },
+        2132455494: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0644\u0648\u0646\u0629", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D9%84%D9%88%D9%86%D8%A9/c2132455494" },
+        940975465: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u062C\u064A\u0648\u0628", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%A8%D8%AC%D9%8A%D9%88%D8%A8/c940975465" },
+        1567146102: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u0634\u062A", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%A8%D8%B4%D8%AA/c1567146102" },
+        832995956: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D8%B7%D8%B1%D8%B2%D8%A9/c832995956" },
+        2031226480: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B1%D8%A3%D8%B3/c2031226480" },
+        270965526: { name: "\u0634\u062A\u0627\u0621 2026", url: "https://darlena.com/%D8%B4%D8%AA%D8%A7%D8%A1-2026/c270965526" },
+        692927841: { name: "\u0637\u0631\u062D", url: "https://darlena.com/%D8%B7%D8%B1%D8%AD/c692927841" },
+        639447590: { name: "\u0646\u0642\u0627\u0628\u0627\u062A", url: "https://darlena.com/%D9%86%D9%82%D8%A7%D8%A8%D8%A7%D8%AA/c639447590" },
+        114756598: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646", url: "https://darlena.com/%D8%B4%D9%8A%D9%81%D9%88%D9%86/c114756598" },
+        273898307: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B4%D8%AA%D9%88%D9%8A%D8%A9/c273898307" }
+      };
+      const priorityOrder = {
+        "\u0631\u0627\u0626\u062C \u0627\u0644\u0627\u0646": 1,
+        "\u062C\u062F\u064A\u062F\u0646\u0627": 2,
+        "\u0634\u062A\u0627\u0621 2026": 3,
+        "\u062C\u0645\u064A\u0639 \u0627\u0644\u0639\u0628\u0627\u064A\u0627\u062A": 4,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629": 5,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0643\u0644\u0648\u0634": 6,
+        "\u062C\u0644\u0627\u0628\u064A\u0627\u062A": 7,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646": 8,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0633\u0648\u062F\u0627\u0621 \u0633\u0627\u062F\u0629": 9,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u062C\u064A\u0648\u0628": 10,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u0634\u062A": 11,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629": 12,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633": 13,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0644\u0648\u0646\u0629": 14,
+        "\u0637\u0631\u062D": 15,
+        "\u0646\u0642\u0627\u0628\u0627\u062A": 16
+      };
+      try {
+        const categories = await redisService.getCategoriesFromRedis();
+        if (!Array.isArray(categories)) {
+          throw new Error("Categories data is not an array");
+        }
+        let dynamicCats = categories.map((cat) => ({
+          slug: cat.name,
+          name: cat.name,
+          filter: cat.name,
+          hasSubcats: false,
+          count: cat.count || 0,
+          ids: cat.ids || (cat.id ? [cat.id] : [])
+        }));
+        dynamicCats = dynamicCats.filter((cat) => {
+          if (cat.ids.length > 0) {
+            const id = Number(cat.ids[0]);
+            return allowedCategories.hasOwnProperty(id);
+          }
+          return false;
+        }).map((cat) => {
+          const id = Number(cat.ids[0]);
+          return {
+            ...cat,
+            name: allowedCategories[id].name,
+            slug: allowedCategories[id].name.toLowerCase().replace(/\s+/g, "-"),
+            url: allowedCategories[id].url,
+            ids: cat.ids
+          };
+        });
+        dynamicCats.sort((a, b) => {
+          const aRank = priorityOrder[a.name] || 999;
+          const bRank = priorityOrder[b.name] || 999;
+          return aRank - bRank;
+        });
+        dynamicCats.unshift({
+          ...this.state.trendingCategory
+        });
+        this.state.categories = dynamicCats;
+      } catch (error) {
+        this.state.categories = [{ ...this.state.trendingCategory }];
+        throw error;
+      } finally {
+        this.categoriesLoading = false;
+      }
+    }
+    createTemplate() {
+      if (this.categoriesLoading) {
+        return `
                 <div class="category-filter">
                     <div class="categories-loading">\u062C\u0627\u0631\u0650 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0641\u0626\u0627\u062A...</div>
                 </div>
-            `:`
+            `;
+      }
+      const template = `
             <style>
                 .category-filter {
                     max-width: 1280px;
@@ -252,30 +1251,388 @@
                 }
             </style>
             <div class="category-filter">
-                ${this.state.categories.map(t=>`
-                    <div class="category-section" data-category="${t.slug}">
+                ${this.state.categories.map((category) => `
+                    <div class="category-section" data-category="${category.slug}">
                         <div class="category-header">
-                            ${t.url?`<a href="${t.url}" class="view-all">
+                            ${category.url ? `<a href="${category.url}" class="view-all">
                                      <i class="sicon-keyboard_arrow_left"></i>
                                      \u0645\u0634\u0627\u0647\u062F\u0629 \u0627\u0644\u0643\u0644
                                      <i class="sicon-keyboard_arrow_right"></i>
-                                   </a>`:""}
-                            <h2 class="category-title">${t.name}</h2>
+                                   </a>` : ""}
+                            <h2 class="category-title">${category.name}</h2>
                         </div>
-                        <div id="products-${t.slug}">
+                        <div id="products-${category.slug}">
                             <div class="slider-loading" style="text-align: center; padding: 1rem;">\u062C\u0627\u0631 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A...</div>
                         </div>
                     </div>
                 `).join("")}
             </div>
-        `}async initializeCategorySections(){try{let e=this.state.categories.map(i=>i.slug==="trending-now"?p.getGlobalProducts(0,this.state.productsPerPage).then(o=>({slug:i.slug,ids:o.objectIDs||[]})).catch(o=>({slug:i.slug,ids:[],error:o})):i.ids&&i.ids.length>0?this.fetchRegularCategory(i).then(o=>({slug:i.slug,ids:o||[]})).catch(o=>({slug:i.slug,ids:[],error:o})):Promise.resolve({slug:i.slug,ids:[]})),r=(await Promise.all(e)).reduce((i,o)=>(i[o.slug]=o.ids,i),{});this.seenProductIds.clear();let s={};for(let i of this.state.categories){let o=r[i.slug]||[],l=[];for(let a of o)if(!this.seenProductIds.has(a)&&(this.seenProductIds.add(a),l.push(a),l.length>=6))break;s[i.slug]=l}this.renderProductSliders(s)}catch(e){this.handleInitError(e)}}async fetchRegularCategory(e){let t=e.ids.map(r=>p.getCategoryPageById(r,0,this.state.productsPerPage).catch(s=>({objectIDs:[]})));try{return(await Promise.all(t)).flatMap(s=>s&&s.objectIDs?s.objectIDs:[])}catch{return[]}}renderProductSliders(e){this.state.categories.forEach(t=>{let r=t.slug,s=e[r]||[],i=this.querySelector(`#products-${r}`);if(i)if(i.innerHTML="",s.length>0){let o=document.createElement("salla-products-slider");o.setAttribute("source","selected"),o.setAttribute("source-value",JSON.stringify(s)),o.setAttribute("limit",String(s.length)),o.setAttribute("slider-id",`slider-${r}`),o.setAttribute("block-title"," "),o.setAttribute("arrows","true"),o.setAttribute("rtl","true"),i.appendChild(o),setTimeout(()=>{o.querySelectorAll(".s-product-card-content-sub").forEach(a=>{a.children.length>1&&(a.style.display="flex",a.style.alignItems="center",a.style.justifyContent="space-between",a.style.flexWrap="nowrap",a.style.width="100%",a.style.overflow="visible")})},500)}else i.innerHTML='<div style="text-align: center; padding: 1rem;">\u0644\u0627 \u062A\u0648\u062C\u062F \u0645\u0646\u062A\u062C\u0627\u062A \u0644\u0639\u0631\u0636\u0647\u0627 \u0641\u064A \u0647\u0630\u0647 \u0627\u0644\u0641\u0626\u0629.</div>'})}handleInitError(e){this.innerHTML=`
+        `;
+      return template;
+    }
+    async initializeCategorySections() {
+      try {
+        const categoryPromises = this.state.categories.map((category) => {
+          if (category.slug === "trending-now") {
+            return redisService.getGlobalProducts(0, this.state.productsPerPage).then((result) => ({ slug: category.slug, ids: result.objectIDs || [] })).catch((error) => ({ slug: category.slug, ids: [], error }));
+          } else if (category.ids && category.ids.length > 0) {
+            return this.fetchRegularCategory(category).then((ids) => ({ slug: category.slug, ids: ids || [] })).catch((error) => ({ slug: category.slug, ids: [], error }));
+          } else {
+            return Promise.resolve({ slug: category.slug, ids: [] });
+          }
+        });
+        const results = await Promise.all(categoryPromises);
+        const fetchedIDsMap = results.reduce((acc, result) => {
+          acc[result.slug] = result.ids;
+          return acc;
+        }, {});
+        this.seenProductIds.clear();
+        const uniqueIDsPerCategory = {};
+        for (const category of this.state.categories) {
+          const fetchedIDs = fetchedIDsMap[category.slug] || [];
+          const uniqueIDs = [];
+          for (const pid of fetchedIDs) {
+            if (!this.seenProductIds.has(pid)) {
+              this.seenProductIds.add(pid);
+              uniqueIDs.push(pid);
+              if (uniqueIDs.length >= 6) break;
+            }
+          }
+          uniqueIDsPerCategory[category.slug] = uniqueIDs;
+        }
+        this.renderProductSliders(uniqueIDsPerCategory);
+      } catch (error) {
+        this.handleInitError(error);
+      }
+    }
+    async fetchRegularCategory(catObj) {
+      const categoryIdFetches = catObj.ids.map(
+        (numericID) => redisService.getCategoryPageById(numericID, 0, this.state.productsPerPage).catch((error) => {
+          return { objectIDs: [] };
+        })
+      );
+      try {
+        const results = await Promise.all(categoryIdFetches);
+        return results.flatMap((data) => data && data.objectIDs ? data.objectIDs : []);
+      } catch (error) {
+        return [];
+      }
+    }
+    renderProductSliders(uniqueIDsPerCategory) {
+      this.state.categories.forEach((category) => {
+        const categorySlug = category.slug;
+        const uniqueIDs = uniqueIDsPerCategory[categorySlug] || [];
+        const container = this.querySelector(`#products-${categorySlug}`);
+        if (!container) {
+          return;
+        }
+        container.innerHTML = "";
+        if (uniqueIDs.length > 0) {
+          const slider = document.createElement("salla-products-slider");
+          slider.setAttribute("source", "selected");
+          slider.setAttribute("source-value", JSON.stringify(uniqueIDs));
+          slider.setAttribute("limit", String(uniqueIDs.length));
+          slider.setAttribute("slider-id", `slider-${categorySlug}`);
+          slider.setAttribute("block-title", " ");
+          slider.setAttribute("arrows", "true");
+          slider.setAttribute("rtl", "true");
+          container.appendChild(slider);
+          setTimeout(() => {
+            const pricingElements = slider.querySelectorAll(".s-product-card-content-sub");
+            pricingElements.forEach((pricing) => {
+              if (pricing.children.length > 1) {
+                pricing.style.display = "flex";
+                pricing.style.alignItems = "center";
+                pricing.style.justifyContent = "space-between";
+                pricing.style.flexWrap = "nowrap";
+                pricing.style.width = "100%";
+                pricing.style.overflow = "visible";
+              }
+            });
+          }, 500);
+        } else {
+          container.innerHTML = '<div style="text-align: center; padding: 1rem;">\u0644\u0627 \u062A\u0648\u062C\u062F \u0645\u0646\u062A\u062C\u0627\u062A \u0644\u0639\u0631\u0636\u0647\u0627 \u0641\u064A \u0647\u0630\u0647 \u0627\u0644\u0641\u0626\u0629.</div>';
+        }
+      });
+    }
+    handleInitError(error) {
+      this.innerHTML = `
             <div class="category-filter">
                 <div class="error-message" style="color: #e53e3e; text-align: center; padding: 2rem; margin-top: 2rem;">
                     \u0639\u0630\u0631\u0627\u064B\u060C \u062D\u062F\u062B \u062E\u0637\u0623 \u0623\u062B\u0646\u0627\u0621 \u062A\u062D\u0645\u064A\u0644 \u0627\u0644\u0641\u0626\u0627\u062A. \u064A\u0631\u062C\u0649 \u062A\u062D\u062F\u064A\u062B \u0627\u0644\u0635\u0641\u062D\u0629.
-                    ${e?"<br><small>Error details logged.</small>":""}
+                    ${error ? "<br><small>Error details logged.</small>" : ""}
                 </div>
             </div>
-        `}};customElements.get("mahaba-category-products")||customElements.define("mahaba-category-products",I);var x=class{constructor(){this.initialized=!1,this.productId=null,this.recentlyViewedKey="recently_viewed_products",this.maxRecentProducts=15,this.recentlyViewedClass="algolia-recently-viewed"}initialize(){if(!this.isProductPage())return;let e=this.getProductId();if(!e||this.initialized&&this.productId===e)return;this.productId=e,this.initialized=!0,this.addToRecentlyViewed(this.productId);let t=()=>{this.loadRecommendations(),this.loadRecentlyViewed()};document.readyState==="complete"||document.readyState==="interactive"?t():document.addEventListener("DOMContentLoaded",t)}loadRecommendations(){let e=document.querySelector('salla-products-slider[source="related"]');e?this.replaceRelatedProducts(e):this.waitForElement('salla-products-slider[source="related"]',t=>{this.replaceRelatedProducts(t)})}async loadRecentlyViewed(){let e=this.getRecentlyViewed();if(!e.length)return;let t=e.map(i=>parseInt(i,10)).filter(i=>i&&!isNaN(i)&&i!==parseInt(this.productId,10));if(!t.length)return;this.removeExistingRecentlyViewed();let r=document.createElement("algolia-recommendations-slider");r.className="algolia-recently-viewed mt-8";let s=document.querySelector('salla-products-slider[source="related"], salla-products-slider[source="selected"], algolia-recommendations-slider');this.insertRecentlyViewedSection(r,s),await r.initialize(t,{title:"\u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629 \u0645\u0624\u062E\u0631\u0627\u064B",filterStock:!0,maxInStock:15}),console.log("[Bundle Recommendations] Recently viewed slider initialized with",t.length,"products")}insertRecentlyViewedSection(e,t){let r=document.querySelector(".product-details, .product-entry, #product-entry");if(r&&r.parentNode)return r.parentNode.insertBefore(e,r.nextSibling),!0;if(t){let i=t.closest(".s-products-slider-container, .algolia-slider-wrapper");if(i&&i.parentNode)return i.parentNode.insertBefore(e,i.nextSibling),!0;if(t.parentNode)return t.parentNode.insertBefore(e,t.nextSibling),!0}let s=document.querySelector("main, .s-product-page-content, #content, .s-product-page");return s?(s.appendChild(e),!0):(document.body.appendChild(e),!0)}addToRecentlyViewed(e){if(e)try{let t=parseInt(e,10);if(isNaN(t))return;let r=this.getRecentlyViewed();r=r.map(s=>parseInt(s,10)).filter(s=>!isNaN(s)),r=r.filter(s=>s!==t),r.unshift(t),r.length>this.maxRecentProducts&&(r=r.slice(0,this.maxRecentProducts)),sessionStorage.setItem(this.recentlyViewedKey,JSON.stringify(r))}catch{}}removeExistingRecentlyViewed(){document.querySelectorAll(`.${this.recentlyViewedClass}`).forEach(e=>e.remove())}getRecentlyViewed(){try{let e=sessionStorage.getItem(this.recentlyViewedKey);return e?JSON.parse(e):[]}catch{return[]}}isProductPage(){return!!document.querySelector('.product-form input[name="id"], [id^="product-"], .sidebar .details-slider')}getProductId(){let e=document.querySelector('.product-form input[name="id"]');if(e?.value){let o=parseInt(e.value,10);if(!isNaN(o))return o}let t=window.salla?.product?.id;if(t){let o=parseInt(t,10);if(!isNaN(o))return o}let r=document.querySelector(".product-entry, #product-entry, .product-details");if(r){let o=r.matches('[id^="product-"]')?r:r.querySelector('[id^="product-"]');if(o&&!o.closest("salla-products-slider")){let l=o.id.replace("product-",""),a=parseInt(l,10);if(!isNaN(a))return a}}let s=document.querySelector('[id^="product-"]');if(s&&!s.closest("salla-products-slider")){let o=s.id.replace("product-",""),l=parseInt(o,10);if(!isNaN(l))return l}let i=window.location.pathname.match(/\/p(\d+)/);if(i?.[1]){let o=parseInt(i[1],10);if(!isNaN(o))return o}return null}async replaceRelatedProducts(e){try{let t=this.productId,r=await p.getRecommendations(t);if(t!==this.productId){console.log("[Bundle Recommendations] Product changed during fetch, aborting");return}if(!r?.length)return;let s=r.map(o=>parseInt(o,10)).filter(o=>o&&!isNaN(o));if(!s.length)return;let i=document.createElement("algolia-recommendations-slider");i.className="product-recommendations-slider",e.parentNode.replaceChild(i,e),await i.initialize(s,{title:"\u0645\u0646\u062A\u062C\u0627\u062A \u0645\u0634\u0627\u0628\u0647\u0629",filterStock:!0,maxInStock:15}),console.log("[Bundle Recommendations] Custom slider initialized with",s.length,"products")}catch(t){console.error("[Bundle Recommendations] Error:",t)}}reset(){this.initialized=!1,this.productId=null,this.removeExistingRecentlyViewed(),document.querySelectorAll("algolia-recommendations-slider").forEach(e=>{e.destroy&&e.destroy()})}waitForElement(e,t){let r=document.querySelector(e);if(r){t(r);return}let s=new MutationObserver(()=>{let i=document.querySelector(e);i&&(s.disconnect(),t(i))});s.observe(document.body,{childList:!0,subtree:!0})}},B=new x,m=B;var w=!1,y=0,C=2;function b(){if(console.log(`[PR Init] Attempt ${y+1}/${C}`),w)return;if(y++,y>C){console.warn("[PR Init] Max attempts reached");return}let c=document.querySelector('salla-products-list[source="product.index"], salla-products-list[source="categories"]');if(console.log("[PR Init] Category list found:",!!c),c){let t=c.getAttribute("source-value");if(t){console.log("[PR Init] \u2705 Creating ranking for category:",t),N("category",t),w=!0;return}}let e=document.querySelector('salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]');if(e){let t=e.getAttribute("source-value");if(t){console.log("[PR Init] \u2705 Creating ranking for tag:",t),N("tag",t),w=!0;return}}y<C&&(console.log("[PR Init] Retrying in 800ms..."),setTimeout(b,800))}function N(c,e){if(document.querySelector(`product-ranking[${c}-id="${e}"]`))return;let t=document.createElement("product-ranking");t.setAttribute(`${c}-id`,e),document.body.appendChild(t)}document.addEventListener("salla::page::changed",()=>{w=!1,y=0,document.querySelectorAll("product-ranking").forEach(c=>c.remove()),setTimeout(b,100)});document.readyState==="loading"?document.addEventListener("DOMContentLoaded",b):(b(),document.addEventListener("salla::ready",()=>{w||setTimeout(b,100)}));var z=`
+        `;
+    }
+  };
+  if (!customElements.get("mahaba-category-products")) {
+    customElements.define("mahaba-category-products", CategoryProductsComponent);
+  }
+
+  // partials/product-recommendations.js
+  var ProductRecommendations = class {
+    constructor() {
+      this.initialized = false;
+      this.productId = null;
+      this.recentlyViewedKey = "recently_viewed_products";
+      this.maxRecentProducts = 15;
+      this.recentlyViewedClass = "algolia-recently-viewed";
+    }
+    initialize() {
+      if (!this.isProductPage()) return;
+      const currentProductId = this.getProductId();
+      if (!currentProductId) return;
+      if (this.initialized && this.productId === currentProductId) return;
+      this.productId = currentProductId;
+      this.initialized = true;
+      this.addToRecentlyViewed(this.productId);
+      const loadComponents = () => {
+        this.loadRecommendations();
+        this.loadRecentlyViewed();
+      };
+      if (document.readyState === "complete" || document.readyState === "interactive") {
+        loadComponents();
+      } else {
+        document.addEventListener("DOMContentLoaded", loadComponents);
+      }
+    }
+    loadRecommendations() {
+      const relatedSection = document.querySelector('salla-products-slider[source="related"]');
+      if (relatedSection) {
+        this.replaceRelatedProducts(relatedSection);
+      } else {
+        this.waitForElement('salla-products-slider[source="related"]', (el) => {
+          this.replaceRelatedProducts(el);
+        });
+      }
+    }
+    async loadRecentlyViewed() {
+      const recentlyViewed = this.getRecentlyViewed();
+      if (!recentlyViewed.length) return;
+      const filteredRecent = recentlyViewed.map((id) => parseInt(id, 10)).filter((id) => id && !isNaN(id) && id !== parseInt(this.productId, 10));
+      if (!filteredRecent.length) return;
+      this.removeExistingRecentlyViewed();
+      const customSlider = document.createElement("algolia-recommendations-slider");
+      customSlider.className = "algolia-recently-viewed mt-8";
+      const relatedSection = document.querySelector('salla-products-slider[source="related"], salla-products-slider[source="selected"], algolia-recommendations-slider');
+      this.insertRecentlyViewedSection(customSlider, relatedSection);
+      await customSlider.initialize(filteredRecent, {
+        title: "\u0627\u0644\u0645\u0646\u062A\u062C\u0627\u062A \u0627\u0644\u0645\u0634\u0627\u0647\u062F\u0629 \u0645\u0624\u062E\u0631\u0627\u064B",
+        filterStock: true,
+        maxInStock: 15
+      });
+      console.log("[Bundle Recommendations] Recently viewed slider initialized with", filteredRecent.length, "products");
+    }
+    insertRecentlyViewedSection(container, relatedSection) {
+      const productDetails = document.querySelector(".product-details, .product-entry, #product-entry");
+      if (productDetails && productDetails.parentNode) {
+        productDetails.parentNode.insertBefore(container, productDetails.nextSibling);
+        return true;
+      }
+      if (relatedSection) {
+        const relatedContainer = relatedSection.closest(".s-products-slider-container, .algolia-slider-wrapper");
+        if (relatedContainer && relatedContainer.parentNode) {
+          relatedContainer.parentNode.insertBefore(container, relatedContainer.nextSibling);
+          return true;
+        }
+        if (relatedSection.parentNode) {
+          relatedSection.parentNode.insertBefore(container, relatedSection.nextSibling);
+          return true;
+        }
+      }
+      const mainContent = document.querySelector("main, .s-product-page-content, #content, .s-product-page");
+      if (mainContent) {
+        mainContent.appendChild(container);
+        return true;
+      }
+      document.body.appendChild(container);
+      return true;
+    }
+    addToRecentlyViewed(productId) {
+      if (!productId) return;
+      try {
+        const numericId = parseInt(productId, 10);
+        if (isNaN(numericId)) return;
+        let recentlyViewed = this.getRecentlyViewed();
+        recentlyViewed = recentlyViewed.map((id) => parseInt(id, 10)).filter((id) => !isNaN(id));
+        recentlyViewed = recentlyViewed.filter((id) => id !== numericId);
+        recentlyViewed.unshift(numericId);
+        if (recentlyViewed.length > this.maxRecentProducts) {
+          recentlyViewed = recentlyViewed.slice(0, this.maxRecentProducts);
+        }
+        sessionStorage.setItem(this.recentlyViewedKey, JSON.stringify(recentlyViewed));
+      } catch (error) {
+      }
+    }
+    removeExistingRecentlyViewed() {
+      document.querySelectorAll(`.${this.recentlyViewedClass}`).forEach((node) => node.remove());
+    }
+    getRecentlyViewed() {
+      try {
+        const stored = sessionStorage.getItem(this.recentlyViewedKey);
+        return stored ? JSON.parse(stored) : [];
+      } catch {
+        return [];
+      }
+    }
+    isProductPage() {
+      return !!document.querySelector('.product-form input[name="id"], [id^="product-"], .sidebar .details-slider');
+    }
+    getProductId() {
+      const formInput = document.querySelector('.product-form input[name="id"]');
+      if (formInput?.value) {
+        const numericId = parseInt(formInput.value, 10);
+        if (!isNaN(numericId)) return numericId;
+      }
+      const sallaProductId = window.salla?.product?.id;
+      if (sallaProductId) {
+        const numericId = parseInt(sallaProductId, 10);
+        if (!isNaN(numericId)) return numericId;
+      }
+      const pageContainer = document.querySelector(".product-entry, #product-entry, .product-details");
+      if (pageContainer) {
+        const scopedContainer = pageContainer.matches('[id^="product-"]') ? pageContainer : pageContainer.querySelector('[id^="product-"]');
+        if (scopedContainer && !scopedContainer.closest("salla-products-slider")) {
+          const fromContainer = scopedContainer.id.replace("product-", "");
+          const numericId = parseInt(fromContainer, 10);
+          if (!isNaN(numericId)) return numericId;
+        }
+      }
+      const standaloneContainer = document.querySelector('[id^="product-"]');
+      if (standaloneContainer && !standaloneContainer.closest("salla-products-slider")) {
+        const fromStandalone = standaloneContainer.id.replace("product-", "");
+        const numericId = parseInt(fromStandalone, 10);
+        if (!isNaN(numericId)) return numericId;
+      }
+      const urlMatch = window.location.pathname.match(/\/p(\d+)/);
+      if (urlMatch?.[1]) {
+        const numericId = parseInt(urlMatch[1], 10);
+        if (!isNaN(numericId)) return numericId;
+      }
+      return null;
+    }
+    async replaceRelatedProducts(element) {
+      try {
+        const requestedProductId = this.productId;
+        const recommendedIds = await redisService.getRecommendations(requestedProductId);
+        if (requestedProductId !== this.productId) {
+          console.log("[Bundle Recommendations] Product changed during fetch, aborting");
+          return;
+        }
+        if (!recommendedIds?.length) return;
+        const numericIds = recommendedIds.map((id) => parseInt(id, 10)).filter((id) => id && !isNaN(id));
+        if (!numericIds.length) return;
+        const customSlider = document.createElement("algolia-recommendations-slider");
+        customSlider.className = "product-recommendations-slider";
+        element.parentNode.replaceChild(customSlider, element);
+        await customSlider.initialize(numericIds, {
+          title: "\u0645\u0646\u062A\u062C\u0627\u062A \u0645\u0634\u0627\u0628\u0647\u0629",
+          filterStock: true,
+          maxInStock: 15
+        });
+        console.log("[Bundle Recommendations] Custom slider initialized with", numericIds.length, "products");
+      } catch (error) {
+        console.error("[Bundle Recommendations] Error:", error);
+      }
+    }
+    reset() {
+      this.initialized = false;
+      this.productId = null;
+      this.removeExistingRecentlyViewed();
+      document.querySelectorAll("algolia-recommendations-slider").forEach((slider) => {
+        if (slider.destroy) {
+          slider.destroy();
+        }
+      });
+    }
+    waitForElement(selector, callback) {
+      const element = document.querySelector(selector);
+      if (element) {
+        callback(element);
+        return;
+      }
+      const observer = new MutationObserver(() => {
+        const element2 = document.querySelector(selector);
+        if (element2) {
+          observer.disconnect();
+          callback(element2);
+        }
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+  };
+  var productRecommendations = new ProductRecommendations();
+  var product_recommendations_default = productRecommendations;
+
+  // product-ranking-init.js
+  var initialized = false;
+  var initAttempts = 0;
+  var MAX_ATTEMPTS = 2;
+  function initRanking() {
+    console.log(`[PR Init] Attempt ${initAttempts + 1}/${MAX_ATTEMPTS}`);
+    if (initialized) return;
+    initAttempts++;
+    if (initAttempts > MAX_ATTEMPTS) {
+      console.warn("[PR Init] Max attempts reached");
+      return;
+    }
+    const categoryList = document.querySelector('salla-products-list[source="product.index"], salla-products-list[source="categories"]');
+    console.log("[PR Init] Category list found:", !!categoryList);
+    if (categoryList) {
+      const categoryId = categoryList.getAttribute("source-value");
+      if (categoryId) {
+        console.log("[PR Init] \u2705 Creating ranking for category:", categoryId);
+        createRanking("category", categoryId);
+        initialized = true;
+        return;
+      }
+    }
+    const tagList = document.querySelector('salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]');
+    if (tagList) {
+      const tagId = tagList.getAttribute("source-value");
+      if (tagId) {
+        console.log("[PR Init] \u2705 Creating ranking for tag:", tagId);
+        createRanking("tag", tagId);
+        initialized = true;
+        return;
+      }
+    }
+    if (initAttempts < MAX_ATTEMPTS) {
+      console.log("[PR Init] Retrying in 800ms...");
+      setTimeout(initRanking, 800);
+    }
+  }
+  function createRanking(type, id) {
+    if (document.querySelector(`product-ranking[${type}-id="${id}"]`)) {
+      return;
+    }
+    const ranking = document.createElement("product-ranking");
+    ranking.setAttribute(`${type}-id`, id);
+    document.body.appendChild(ranking);
+  }
+  document.addEventListener("salla::page::changed", () => {
+    initialized = false;
+    initAttempts = 0;
+    document.querySelectorAll("product-ranking").forEach((el) => el.remove());
+    setTimeout(initRanking, 100);
+  });
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", initRanking);
+  } else {
+    initRanking();
+    document.addEventListener("salla::ready", () => {
+      if (!initialized) {
+        setTimeout(initRanking, 100);
+      }
+    });
+  }
+
+  // partials/youtube-url-transformer.js
+  var STYLES = `
 .yt-placeholder {
   position: relative;
   display: block;
@@ -343,7 +1700,209 @@
 .yt-placeholder.playing .yt-placeholder-play {
   display: none;
 }
-`,L=class{constructor(){this.processed=new WeakSet,this.stylesInjected=!1,this.init()}extractVideoId(e){if(!e)return null;let t=[/(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,/(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,/(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,/(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/];for(let r of t){let s=e.match(r);if(s)return s[1]}return null}injectStyles(){if(this.stylesInjected||document.getElementById("yt-url-transformer-styles"))return;let e=document.createElement("style");e.id="yt-url-transformer-styles",e.textContent=z,document.head.appendChild(e),this.stylesInjected=!0}createPlaceholder(e){let t=document.createElement("div");t.className="yt-placeholder",t.dataset.videoId=e;let r=document.createElement("img");r.src=`https://img.youtube.com/vi/${e}/hqdefault.jpg`,r.alt="Video thumbnail",r.loading="lazy";let s=document.createElement("button");return s.className="yt-placeholder-play",s.setAttribute("aria-label","Play video"),t.appendChild(r),t.appendChild(s),t.addEventListener("click",()=>this.playVideo(t,e)),t}playVideo(e,t){if(e.classList.contains("playing"))return;let r=document.createElement("iframe");r.src=`https://www.youtube-nocookie.com/embed/${t}?autoplay=1&rel=0`,r.allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture",r.allowFullscreen=!0,r.dataset.ytOptIn="true",e.appendChild(r),e.classList.add("playing")}isYouTubeUrl(e){return e?/(?:youtube\.com|youtu\.be)/.test(e):!1}transformLink(e){if(this.processed.has(e)||!this.isYouTubeUrl(e.href))return;let t=this.extractVideoId(e.href);if(!t)return;let r=this.createPlaceholder(t);e.replaceWith(r),this.processed.add(r)}transformTextUrls(e){if(this.processed.has(e))return;let t=document.createTreeWalker(e,NodeFilter.SHOW_TEXT,null,!1),r=/https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g,s=[],i;for(;i=t.nextNode();){let o=i.textContent;r.test(o)&&s.push(i),r.lastIndex=0}s.forEach(o=>{let l=o.textContent,a=document.createDocumentFragment(),d=0,n;for(r.lastIndex=0;(n=r.exec(l))!==null;){n.index>d&&a.appendChild(document.createTextNode(l.slice(d,n.index)));let h=n[1],u=this.createPlaceholder(h);a.appendChild(u),d=n.index+n[0].length}d<l.length&&a.appendChild(document.createTextNode(l.slice(d))),o.parentNode.replaceChild(a,o)}),this.processed.add(e)}transform(e=document.body){if(!e)return;e.querySelectorAll('a[href*="youtube.com"], a[href*="youtu.be"]').forEach(s=>this.transformLink(s)),e.querySelectorAll('.product-description, .s-product-description, [class*="description"], .widget-content').forEach(s=>this.transformTextUrls(s))}setupObserver(){new MutationObserver(t=>{let r=!1;for(let s of t){for(let i of s.addedNodes)if(i.nodeType===Node.ELEMENT_NODE&&(i.querySelector?.('a[href*="youtube"], a[href*="youtu.be"]')||i.matches?.('[class*="description"]'))){r=!0;break}if(r)break}r&&requestAnimationFrame(()=>this.transform())}).observe(document.body,{childList:!0,subtree:!0})}setupEventListeners(){document.addEventListener("salla::page::changed",()=>{setTimeout(()=>this.transform(),100)}),document.addEventListener("theme::ready",()=>{this.transform()}),window.salla?.event&&(window.salla.event.on("product::loaded",()=>this.transform()),window.salla.event.on("products::loaded",()=>this.transform()))}init(){this.injectStyles(),document.readyState==="loading"?document.addEventListener("DOMContentLoaded",()=>this.transform()):this.transform(),window.addEventListener("load",()=>this.transform()),this.setupObserver(),this.setupEventListeners(),console.log("[Algolia Bundle] YouTube URL transformer initialized")}},ie=new L;var M=`
+`;
+  var YouTubeUrlTransformer = class {
+    constructor() {
+      this.processed = /* @__PURE__ */ new WeakSet();
+      this.stylesInjected = false;
+      this.init();
+    }
+    /**
+     * Extract video ID from YouTube URL
+     */
+    extractVideoId(url) {
+      if (!url) return null;
+      const patterns = [
+        /(?:youtube\.com\/watch\?v=)([a-zA-Z0-9_-]{11})/,
+        /(?:youtube\.com\/embed\/)([a-zA-Z0-9_-]{11})/,
+        /(?:youtu\.be\/)([a-zA-Z0-9_-]{11})/,
+        /(?:youtube\.com\/v\/)([a-zA-Z0-9_-]{11})/
+      ];
+      for (const pattern of patterns) {
+        const match = url.match(pattern);
+        if (match) return match[1];
+      }
+      return null;
+    }
+    /**
+     * Inject CSS styles once
+     */
+    injectStyles() {
+      if (this.stylesInjected) return;
+      if (document.getElementById("yt-url-transformer-styles")) return;
+      const style = document.createElement("style");
+      style.id = "yt-url-transformer-styles";
+      style.textContent = STYLES;
+      document.head.appendChild(style);
+      this.stylesInjected = true;
+    }
+    /**
+     * Create placeholder element
+     */
+    createPlaceholder(videoId) {
+      const container = document.createElement("div");
+      container.className = "yt-placeholder";
+      container.dataset.videoId = videoId;
+      const img = document.createElement("img");
+      img.src = `https://img.youtube.com/vi/${videoId}/hqdefault.jpg`;
+      img.alt = "Video thumbnail";
+      img.loading = "lazy";
+      const playBtn = document.createElement("button");
+      playBtn.className = "yt-placeholder-play";
+      playBtn.setAttribute("aria-label", "Play video");
+      container.appendChild(img);
+      container.appendChild(playBtn);
+      container.addEventListener("click", () => this.playVideo(container, videoId));
+      return container;
+    }
+    /**
+     * Replace placeholder with iframe
+     */
+    playVideo(container, videoId) {
+      if (container.classList.contains("playing")) return;
+      const iframe = document.createElement("iframe");
+      iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0`;
+      iframe.allow = "accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture";
+      iframe.allowFullscreen = true;
+      iframe.dataset.ytOptIn = "true";
+      container.appendChild(iframe);
+      container.classList.add("playing");
+    }
+    /**
+     * Check if URL is a YouTube URL
+     */
+    isYouTubeUrl(url) {
+      if (!url) return false;
+      return /(?:youtube\.com|youtu\.be)/.test(url);
+    }
+    /**
+     * Transform a link element into placeholder
+     */
+    transformLink(link) {
+      if (this.processed.has(link)) return;
+      if (!this.isYouTubeUrl(link.href)) return;
+      const videoId = this.extractVideoId(link.href);
+      if (!videoId) return;
+      const placeholder = this.createPlaceholder(videoId);
+      link.replaceWith(placeholder);
+      this.processed.add(placeholder);
+    }
+    /**
+     * Transform plain text YouTube URLs in an element
+     */
+    transformTextUrls(element) {
+      if (this.processed.has(element)) return;
+      const walker = document.createTreeWalker(
+        element,
+        NodeFilter.SHOW_TEXT,
+        null,
+        false
+      );
+      const urlPattern = /https?:\/\/(?:www\.)?(?:youtube\.com\/watch\?v=|youtu\.be\/)([a-zA-Z0-9_-]{11})/g;
+      const nodesToReplace = [];
+      let node;
+      while (node = walker.nextNode()) {
+        const text = node.textContent;
+        if (urlPattern.test(text)) {
+          nodesToReplace.push(node);
+        }
+        urlPattern.lastIndex = 0;
+      }
+      nodesToReplace.forEach((textNode) => {
+        const text = textNode.textContent;
+        const fragment = document.createDocumentFragment();
+        let lastIndex = 0;
+        let match;
+        urlPattern.lastIndex = 0;
+        while ((match = urlPattern.exec(text)) !== null) {
+          if (match.index > lastIndex) {
+            fragment.appendChild(document.createTextNode(text.slice(lastIndex, match.index)));
+          }
+          const videoId = match[1];
+          const placeholder = this.createPlaceholder(videoId);
+          fragment.appendChild(placeholder);
+          lastIndex = match.index + match[0].length;
+        }
+        if (lastIndex < text.length) {
+          fragment.appendChild(document.createTextNode(text.slice(lastIndex)));
+        }
+        textNode.parentNode.replaceChild(fragment, textNode);
+      });
+      this.processed.add(element);
+    }
+    /**
+     * Scan and transform all YouTube URLs in a root element
+     */
+    transform(root = document.body) {
+      if (!root) return;
+      const links = root.querySelectorAll('a[href*="youtube.com"], a[href*="youtu.be"]');
+      links.forEach((link) => this.transformLink(link));
+      const descriptions = root.querySelectorAll(
+        '.product-description, .s-product-description, [class*="description"], .widget-content'
+      );
+      descriptions.forEach((desc) => this.transformTextUrls(desc));
+    }
+    /**
+     * Setup MutationObserver for dynamic content
+     */
+    setupObserver() {
+      const observer = new MutationObserver((mutations) => {
+        let shouldScan = false;
+        for (const mutation of mutations) {
+          for (const node of mutation.addedNodes) {
+            if (node.nodeType === Node.ELEMENT_NODE) {
+              if (node.querySelector?.('a[href*="youtube"], a[href*="youtu.be"]') || node.matches?.('[class*="description"]')) {
+                shouldScan = true;
+                break;
+              }
+            }
+          }
+          if (shouldScan) break;
+        }
+        if (shouldScan) {
+          requestAnimationFrame(() => this.transform());
+        }
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+    /**
+     * Setup Salla event listeners
+     */
+    setupEventListeners() {
+      document.addEventListener("salla::page::changed", () => {
+        setTimeout(() => this.transform(), 100);
+      });
+      document.addEventListener("theme::ready", () => {
+        this.transform();
+      });
+      if (window.salla?.event) {
+        window.salla.event.on("product::loaded", () => this.transform());
+        window.salla.event.on("products::loaded", () => this.transform());
+      }
+    }
+    /**
+     * Initialize transformer
+     */
+    init() {
+      this.injectStyles();
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => this.transform());
+      } else {
+        this.transform();
+      }
+      window.addEventListener("load", () => this.transform());
+      this.setupObserver();
+      this.setupEventListeners();
+      console.log("[Algolia Bundle] YouTube URL transformer initialized");
+    }
+  };
+  var youtubeUrlTransformer = new YouTubeUrlTransformer();
+
+  // partials/product-title-enhancer.js
+  var TITLE_STYLES = `
   .s-product-card-entry .s-product-card-content-title a {
     display: block;
     white-space: nowrap;
@@ -367,7 +1926,129 @@
     font-size: 0.85rem;
     font-weight: normal;
   }
-`,T=class{constructor(){this.processedElements=new WeakSet,this.pendingScan=!1,this.init()}getTitleClass(e){if(!e)return"";let t=e.length;return t>70?"title-extreme":t>50?"title-very-long":t>30?"title-long":t>15?"title-medium":""}enhanceTitle(e){if(this.processedElements.has(e))return;let t=e.textContent?.trim(),r=this.getTitleClass(t);r&&e.classList.add(r),this.processedElements.add(e)}enhanceAllTitles(){document.querySelectorAll(".s-product-card-content-title a").forEach(t=>this.enhanceTitle(t))}scheduleScan(){this.pendingScan||(this.pendingScan=!0,requestAnimationFrame(()=>{this.enhanceAllTitles(),this.pendingScan=!1}))}injectStyles(){if(document.getElementById("product-title-enhancer-styles"))return;let e=document.createElement("style");e.id="product-title-enhancer-styles",e.textContent=M,document.head.appendChild(e)}setupMutationObserver(){new MutationObserver(t=>{let r=!1;for(let s of t){if(s.addedNodes.length){for(let i of s.addedNodes)if(i.nodeType===Node.ELEMENT_NODE&&(i.matches?.(".s-product-card-content-title a")||i.matches?.(".s-product-card-entry")||i.querySelector?.(".s-product-card-content-title a"))){r=!0;break}}if(r)break}r&&this.scheduleScan()}).observe(document.body,{childList:!0,subtree:!0})}setupSallaEventListeners(){window.salla?.event&&(window.salla.event.on("products::loaded",()=>this.scheduleScan()),window.salla.event.on("product::loaded",()=>this.scheduleScan())),document.addEventListener("theme::ready",()=>this.scheduleScan()),document.addEventListener("salla::page::changed",()=>{setTimeout(()=>this.scheduleScan(),100)})}init(){this.injectStyles(),this.enhanceAllTitles(),document.readyState==="loading"&&document.addEventListener("DOMContentLoaded",()=>this.enhanceAllTitles()),window.addEventListener("load",()=>this.enhanceAllTitles()),this.setupMutationObserver(),this.setupSallaEventListeners(),console.log("[Algolia Bundle] Product title enhancer initialized")}},oe=new T;var j="https://productstoredis-163858290861.me-central2.run.app/product-images",k=new Map,v=new Map,$=`
+`;
+  var ProductTitleEnhancer = class {
+    constructor() {
+      this.processedElements = /* @__PURE__ */ new WeakSet();
+      this.pendingScan = false;
+      this.init();
+    }
+    /**
+     * Get CSS class based on title length
+     * Matches main theme thresholds exactly
+     */
+    getTitleClass(title) {
+      if (!title) return "";
+      const length = title.length;
+      if (length > 70) return "title-extreme";
+      if (length > 50) return "title-very-long";
+      if (length > 30) return "title-long";
+      if (length > 15) return "title-medium";
+      return "";
+    }
+    /**
+     * Enhance a single title element
+     */
+    enhanceTitle(element) {
+      if (this.processedElements.has(element)) return;
+      const title = element.textContent?.trim();
+      const titleClass = this.getTitleClass(title);
+      if (titleClass) {
+        element.classList.add(titleClass);
+      }
+      this.processedElements.add(element);
+    }
+    /**
+     * Scan and enhance all product title elements
+     */
+    enhanceAllTitles() {
+      const titles = document.querySelectorAll(".s-product-card-content-title a");
+      titles.forEach((el) => this.enhanceTitle(el));
+    }
+    /**
+     * Debounced scan - prevents multiple rapid scans
+     */
+    scheduleScan() {
+      if (this.pendingScan) return;
+      this.pendingScan = true;
+      requestAnimationFrame(() => {
+        this.enhanceAllTitles();
+        this.pendingScan = false;
+      });
+    }
+    /**
+     * Inject CSS styles into document head
+     */
+    injectStyles() {
+      if (document.getElementById("product-title-enhancer-styles")) return;
+      const style = document.createElement("style");
+      style.id = "product-title-enhancer-styles";
+      style.textContent = TITLE_STYLES;
+      document.head.appendChild(style);
+    }
+    /**
+     * Setup MutationObserver to catch dynamically added products
+     */
+    setupMutationObserver() {
+      const observer = new MutationObserver((mutations) => {
+        let shouldScan = false;
+        for (const mutation of mutations) {
+          if (mutation.addedNodes.length) {
+            for (const node of mutation.addedNodes) {
+              if (node.nodeType === Node.ELEMENT_NODE) {
+                if (node.matches?.(".s-product-card-content-title a") || node.matches?.(".s-product-card-entry") || node.querySelector?.(".s-product-card-content-title a")) {
+                  shouldScan = true;
+                  break;
+                }
+              }
+            }
+          }
+          if (shouldScan) break;
+        }
+        if (shouldScan) {
+          this.scheduleScan();
+        }
+      });
+      observer.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+    /**
+     * Setup Salla event listeners for product loading
+     */
+    setupSallaEventListeners() {
+      if (window.salla?.event) {
+        window.salla.event.on("products::loaded", () => this.scheduleScan());
+        window.salla.event.on("product::loaded", () => this.scheduleScan());
+      }
+      document.addEventListener("theme::ready", () => this.scheduleScan());
+      document.addEventListener("salla::page::changed", () => {
+        setTimeout(() => this.scheduleScan(), 100);
+      });
+    }
+    /**
+     * Initialize the enhancer
+     */
+    init() {
+      this.injectStyles();
+      this.enhanceAllTitles();
+      if (document.readyState === "loading") {
+        document.addEventListener("DOMContentLoaded", () => this.enhanceAllTitles());
+      }
+      window.addEventListener("load", () => this.enhanceAllTitles());
+      this.setupMutationObserver();
+      this.setupSallaEventListeners();
+      console.log("[Algolia Bundle] Product title enhancer initialized");
+    }
+  };
+  var productTitleEnhancer = new ProductTitleEnhancer();
+
+  // partials/product-card-enhancer.js
+  var IMAGE_API_BASE = "https://productstoredis-163858290861.me-central2.run.app/product-images";
+  var imageCache = /* @__PURE__ */ new Map();
+  var pendingRequests = /* @__PURE__ */ new Map();
+  var SLIDER_STYLES = `
 .product-slider-dots {
   position: absolute;
   bottom: 10px;
@@ -436,113 +2117,407 @@
 .swipe-indicator.right {
   background: linear-gradient(270deg, rgba(0,0,0,0.2) 0%, rgba(0,0,0,0) 50%);
 }
-`;function F(){if(document.getElementById("product-slider-enhancer-styles"))return;let c=document.createElement("style");c.id="product-slider-enhancer-styles",c.textContent=$,document.head.appendChild(c)}async function O(c){if(k.has(c))return k.get(c);if(v.has(c))return v.get(c);let e=(async()=>{try{let t=new AbortController,r=setTimeout(()=>t.abort(),5e3),s=await fetch(`${j}/${c}`,{signal:t.signal});if(clearTimeout(r),!s.ok)return null;let i=await s.json();return k.set(c,i),i}catch{return null}finally{v.delete(c)}})();return v.set(c,e),e}var P=class{constructor(){this.polling=!1,this.lastEnhanceTime=0,this.pollInterval=100,this.stopAfterIdle=5e3,this.init()}init(){F(),this.startPolling();let e=()=>{this.lastEnhanceTime=Date.now(),this.startPolling()};document.addEventListener("DOMContentLoaded",e),window.addEventListener("load",e),["salla-products-slider::products.fetched","salla-products-list::products.fetched","salla::page::changed","theme::ready"].forEach(t=>document.addEventListener(t,e)),new MutationObserver(t=>{for(let r of t)for(let s of r.addedNodes)if(s.nodeType===1&&(s.classList?.contains("s-product-card-entry")||s.querySelector?.(".s-product-card-entry"))){e();return}}).observe(document.body,{childList:!0,subtree:!0}),console.log("[Card Enhancer] Initialized with continuous polling")}startPolling(){this.polling||(this.polling=!0,this.poll())}poll(){if(!this.polling)return;if(this.scan()>0&&(this.lastEnhanceTime=Date.now()),Date.now()-this.lastEnhanceTime>this.stopAfterIdle){this.polling=!1,console.log("[Card Enhancer] Polling stopped (idle)");return}setTimeout(()=>requestAnimationFrame(()=>this.poll()),this.pollInterval)}scan(){let e=0;return document.querySelectorAll(".s-product-card-entry").forEach(t=>{if(t.querySelector(".product-slider-dots"))return;let r=t.querySelector(".s-product-card-image");if(!r)return;let s=r.querySelector("a");if(!s)return;let i=this.extractProductId(t);i&&(this.enhance(t,i,r,s),e++)}),e}extractProductId(e){if(e.dataset.id)return e.dataset.id;if(e.id&&/^\d+$/.test(e.id))return e.id;let t=e.querySelector('a[href*="/product/"]');if(t?.href){let r=t.href.match(/\/product\/[^\/]+\/(\d+)/);if(r)return r[1]}try{let r=e.getAttribute("product");if(r){let s=JSON.parse(r);if(s.id)return String(s.id)}}catch{}return null}enhance(e,t,r,s){let i=`s${t}-${Math.random().toString(36).substr(2,4)}`,o=document.createElement("div");o.className="swipe-indicator",s.appendChild(o);let l=document.createElement("div");l.className="product-slider-dots",l.dataset.sliderId=i;for(let a=0;a<3;a++){let d=document.createElement("span");d.className="product-slider-dot"+(a===0?" active":""),d.dataset.index=a,l.appendChild(d)}r.appendChild(l),new q({productId:t,sliderId:i,imageWrapper:r,imageLink:s,dotsContainer:l,swipeIndicator:o})}},q=class{constructor({productId:e,sliderId:t,imageWrapper:r,imageLink:s,dotsContainer:i,swipeIndicator:o}){this.productId=e,this.sliderId=t,this.imageWrapper=r,this.imageLink=s,this.dotsContainer=i,this.swipeIndicator=o,this.currentSlide=0,this.images=[],this.imagesLoaded=!1,this.setupGestures(),this.setupDotClicks(),this.setupLazyImageLoad()}setupDotClicks(){this.dotsContainer.querySelectorAll(".product-slider-dot").forEach(e=>{e.addEventListener("click",t=>{t.preventDefault(),t.stopPropagation(),this.goToSlide(parseInt(e.dataset.index)),this.haptic("light")})})}setupGestures(){let e,t,r,s=!1,i=!1,o=(n,h,u)=>{e=n,t=h,r=Date.now(),s=!1,i=!1,u.stopPropagation()},l=(n,h,u)=>{if(e==null)return;let g=n-e,f=h-t;!i&&(Math.abs(g)>8||Math.abs(f)>8)&&(i=!0,s=Math.abs(g)>Math.abs(f)),s&&(u.stopPropagation(),u.preventDefault(),this.swipeIndicator.classList.toggle("right",g>0),this.swipeIndicator.style.opacity=Math.min(Math.abs(g)/100,.5))},a=(n,h)=>{if(this.swipeIndicator.style.opacity=0,s&&e!=null){let u=n-e,g=Date.now()-r<300?30:50;Math.abs(u)>=g&&(u>0?this.prevSlide():this.nextSlide(),this.haptic("medium")),h.stopPropagation(),h.preventDefault()}e=t=null,s=!1,i=!1};this.imageLink.addEventListener("touchstart",n=>{o(n.touches[0].clientX,n.touches[0].clientY,n)},{passive:!1,capture:!0}),this.imageLink.addEventListener("touchmove",n=>{l(n.touches[0].clientX,n.touches[0].clientY,n)},{passive:!1,capture:!0}),this.imageLink.addEventListener("touchend",n=>{a(n.changedTouches[0].clientX,n)},{passive:!1,capture:!0});let d=!1;this.imageLink.addEventListener("mousedown",n=>{d=!0,o(n.clientX,n.clientY,n),n.preventDefault(),n.stopPropagation()},{capture:!0}),this.imageLink.addEventListener("mousemove",n=>{d&&l(n.clientX,n.clientY,n)},{capture:!0}),window.addEventListener("mouseup",n=>{d&&(d=!1,a(n.clientX,n))})}setupLazyImageLoad(){let e=new IntersectionObserver(t=>{t[0].isIntersecting&&!this.imagesLoaded&&(this.imagesLoaded=!0,e.disconnect(),this.loadImages())},{rootMargin:"300px"});e.observe(this.imageWrapper)}async loadImages(){let e=await O(this.productId);if(!e?.images?.length){this.dotsContainer.style.display="none";return}let t=e.images.filter(r=>r?.url).sort((r,s)=>(r.sort||0)-(s.sort||0)).slice(0,2);if(t.length===0){this.dotsContainer.style.display="none";return}if(this.images=t,t.forEach((r,s)=>{let i=document.createElement("img");i.className="product-slider-image",i.dataset.index=s+1,i.alt=r.alt||"Product image",i.loading="lazy",i.src=r.url,i.onerror=()=>{i.remove();let o=this.dotsContainer.querySelector(`[data-index="${s+1}"]`);o&&(o.style.display="none"),this.updateDotsVisibility()},this.imageLink.appendChild(i)}),t.length<2){let r=this.dotsContainer.querySelector('[data-index="2"]');r&&(r.style.display="none")}this.dotsContainer.classList.add("has-images")}updateDotsVisibility(){this.dotsContainer.querySelectorAll('.product-slider-dot:not([style*="display: none"])').length<=1&&this.dotsContainer.classList.remove("has-images")}goToSlide(e){if(!this.images.length&&e>0)return;this.currentSlide=e,this.dotsContainer.querySelectorAll(".product-slider-dot").forEach((s,i)=>{s.classList.toggle("active",i===e)});let t=this.imageLink.querySelector("img:not(.product-slider-image)"),r=this.imageLink.querySelectorAll(".product-slider-image");e===0?(t&&(t.style.cssText="visibility:visible;opacity:1;z-index:10;"),r.forEach(s=>s.classList.remove("active"))):(t&&(t.style.cssText="visibility:hidden;opacity:0;z-index:5;"),r.forEach(s=>{s.classList.toggle("active",parseInt(s.dataset.index)===e)}))}prevSlide(){let e=this.images.length+1;this.goToSlide((this.currentSlide-1+e)%e)}nextSlide(){let e=this.images.length+1;this.goToSlide((this.currentSlide+1)%e)}haptic(e){try{navigator.vibrate?.(e==="light"?10:25)}catch{}}};new P;window.productRecommendations=m;window.redisService=p;var _=c=>document.readyState==="loading"?document.addEventListener("DOMContentLoaded",c):c();function V(){if(!document.body.classList.contains("index")){console.log("[Algolia Bundle] Not on homepage, skipping category products injection");return}let c=".app-inner",e="mahaba-category-products";function t(){let s=document.querySelector(c);if(s&&!s.querySelector(e))try{console.log(`[Algolia Bundle] Found ${c}, injecting ${e}...`);let i=document.createElement(e),o=document.querySelector(".store-footer");return o?s.insertBefore(i,o):s.appendChild(i),console.log("\u2705 [Algolia Bundle] Homepage category component injected successfully"),!0}catch(i){return console.error("[Algolia Bundle] Error during injection:",i),!0}return!1}if(t())return;console.log(`[Algolia Bundle] ${c} not found, waiting for async load...`),new MutationObserver((s,i)=>{s.some(l=>l.addedNodes.length>0)&&t()&&i.disconnect()}).observe(document.body,{childList:!0,subtree:!0})}function H(){if(document.getElementById("cart-addons-slider-styles"))return;let c=document.createElement("style");c.id="cart-addons-slider-styles",c.textContent=`
-    cart-addons-slider.cart-addons-wrapper {
-      position: relative;
-      margin-top: 1rem;
-      overflow: hidden;
-      border-radius: 0.5rem;
-      border: 1px solid rgba(229, 231, 235, 1);
-      background-color: #fff;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
-      display: block;
+`;
+  function injectStyles() {
+    if (document.getElementById("product-slider-enhancer-styles")) return;
+    const style = document.createElement("style");
+    style.id = "product-slider-enhancer-styles";
+    style.textContent = SLIDER_STYLES;
+    document.head.appendChild(style);
+  }
+  async function fetchImages(productId) {
+    if (imageCache.has(productId)) {
+      return imageCache.get(productId);
     }
-    cart-addons-slider .cart-addons-title {
-      display: flex;
-      width: 100%;
-      align-items: center;
-      justify-content: space-between;
-      padding: 0.75rem 1rem;
-      font-size: 0.875rem;
-      line-height: 1.25rem;
-      font-weight: 500;
-      background-color: #f9fafb;
-      color: #111827;
-      border-bottom: 1px solid rgba(229, 231, 235, 1);
+    if (pendingRequests.has(productId)) {
+      return pendingRequests.get(productId);
     }
-    cart-addons-slider salla-products-list {
-      opacity: 1;
-      transition: opacity 0.3s ease-in-out;
-      display: block;
+    const promise = (async () => {
+      try {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 5e3);
+        const res = await fetch(`${IMAGE_API_BASE}/${productId}`, {
+          signal: controller.signal
+        });
+        clearTimeout(timeout);
+        if (!res.ok) return null;
+        const data = await res.json();
+        imageCache.set(productId, data);
+        return data;
+      } catch (e) {
+        return null;
+      } finally {
+        pendingRequests.delete(productId);
+      }
+    })();
+    pendingRequests.set(productId, promise);
+    return promise;
+  }
+  var ProductCardEnhancer = class {
+    constructor() {
+      this.polling = false;
+      this.lastEnhanceTime = 0;
+      this.pollInterval = 100;
+      this.stopAfterIdle = 5e3;
+      this.init();
     }
-    cart-addons-slider .s-products-list-wrapper {
-      display: flex !important;
-      gap: 0.5rem;
-      overflow-x: auto;
-      padding: 0.75rem 1rem 0.5rem;
-      scroll-behavior: smooth;
-      scroll-snap-type: x mandatory;
-      -webkit-overflow-scrolling: touch;
-      scrollbar-width: none;
+    init() {
+      injectStyles();
+      this.startPolling();
+      const reactivate = () => {
+        this.lastEnhanceTime = Date.now();
+        this.startPolling();
+      };
+      document.addEventListener("DOMContentLoaded", reactivate);
+      window.addEventListener("load", reactivate);
+      [
+        "salla-products-slider::products.fetched",
+        "salla-products-list::products.fetched",
+        "salla::page::changed",
+        "theme::ready"
+      ].forEach((evt) => document.addEventListener(evt, reactivate));
+      new MutationObserver((mutations) => {
+        for (const m of mutations) {
+          for (const node of m.addedNodes) {
+            if (node.nodeType === 1 && (node.classList?.contains("s-product-card-entry") || node.querySelector?.(".s-product-card-entry"))) {
+              reactivate();
+              return;
+            }
+          }
+        }
+      }).observe(document.body, { childList: true, subtree: true });
+      console.log("[Card Enhancer] Initialized with continuous polling");
     }
-    cart-addons-slider .s-products-list-wrapper::-webkit-scrollbar {
-      display: none;
+    startPolling() {
+      if (this.polling) return;
+      this.polling = true;
+      this.poll();
     }
-    cart-addons-slider .s-product-card-entry {
-      flex: none;
-      width: 160px;
-      scroll-snap-align: start;
-      opacity: 1 !important;
-      visibility: visible !important;
+    poll() {
+      if (!this.polling) return;
+      const count = this.scan();
+      if (count > 0) {
+        this.lastEnhanceTime = Date.now();
+      }
+      if (Date.now() - this.lastEnhanceTime > this.stopAfterIdle) {
+        this.polling = false;
+        console.log("[Card Enhancer] Polling stopped (idle)");
+        return;
+      }
+      setTimeout(() => requestAnimationFrame(() => this.poll()), this.pollInterval);
     }
-    cart-addons-slider .s-product-card-image {
-      position: relative;
-      aspect-ratio: 2 / 3;
-      height: auto !important;
+    scan() {
+      let count = 0;
+      document.querySelectorAll(".s-product-card-entry").forEach((card) => {
+        if (card.querySelector(".product-slider-dots")) return;
+        const imageWrapper = card.querySelector(".s-product-card-image");
+        if (!imageWrapper) return;
+        const imageLink = imageWrapper.querySelector("a");
+        if (!imageLink) return;
+        const productId = this.extractProductId(card);
+        if (!productId) return;
+        this.enhance(card, productId, imageWrapper, imageLink);
+        count++;
+      });
+      return count;
     }
-    cart-addons-slider .s-product-card-image img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-      opacity: 1 !important;
+    extractProductId(card) {
+      if (card.dataset.id) return card.dataset.id;
+      if (card.id && /^\d+$/.test(card.id)) return card.id;
+      const link = card.querySelector('a[href*="/product/"]');
+      if (link?.href) {
+        const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
+        if (match) return match[1];
+      }
+      try {
+        const attr = card.getAttribute("product");
+        if (attr) {
+          const data = JSON.parse(attr);
+          if (data.id) return String(data.id);
+        }
+      } catch (e) {
+      }
+      return null;
     }
-    cart-addons-slider .s-product-card-content {
-      padding: 0.25rem;
+    enhance(card, productId, imageWrapper, imageLink) {
+      const sliderId = `s${productId}-${Math.random().toString(36).substr(2, 4)}`;
+      const swipeIndicator = document.createElement("div");
+      swipeIndicator.className = "swipe-indicator";
+      imageLink.appendChild(swipeIndicator);
+      const dotsContainer = document.createElement("div");
+      dotsContainer.className = "product-slider-dots";
+      dotsContainer.dataset.sliderId = sliderId;
+      for (let i = 0; i < 3; i++) {
+        const dot = document.createElement("span");
+        dot.className = "product-slider-dot" + (i === 0 ? " active" : "");
+        dot.dataset.index = i;
+        dotsContainer.appendChild(dot);
+      }
+      imageWrapper.appendChild(dotsContainer);
+      new CardSlider({
+        productId,
+        sliderId,
+        imageWrapper,
+        imageLink,
+        dotsContainer,
+        swipeIndicator
+      });
     }
-    cart-addons-slider .s-product-card-content .s-product-card-content-title {
-      margin-bottom: 0.125rem;
-      font-size: 0.75rem;
-      line-height: 1rem;
+  };
+  var CardSlider = class {
+    constructor({ productId, sliderId, imageWrapper, imageLink, dotsContainer, swipeIndicator }) {
+      this.productId = productId;
+      this.sliderId = sliderId;
+      this.imageWrapper = imageWrapper;
+      this.imageLink = imageLink;
+      this.dotsContainer = dotsContainer;
+      this.swipeIndicator = swipeIndicator;
+      this.currentSlide = 0;
+      this.images = [];
+      this.imagesLoaded = false;
+      this.setupGestures();
+      this.setupDotClicks();
+      this.setupLazyImageLoad();
     }
-    cart-addons-slider .s-product-card-content .s-product-card-content-title a {
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+    setupDotClicks() {
+      this.dotsContainer.querySelectorAll(".product-slider-dot").forEach((dot) => {
+        dot.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          this.goToSlide(parseInt(dot.dataset.index));
+          this.haptic("light");
+        });
+      });
     }
-    cart-addons-slider .s-product-card-content .s-product-card-content-sub {
-      font-size: 0.75rem;
-      line-height: 1rem;
-      gap: 0.125rem;
+    setupGestures() {
+      let startX, startY, startTime;
+      let isOurSwipe = false;
+      let directionDecided = false;
+      const onStart = (x, y, e) => {
+        startX = x;
+        startY = y;
+        startTime = Date.now();
+        isOurSwipe = false;
+        directionDecided = false;
+        e.stopPropagation();
+      };
+      const onMove = (x, y, e) => {
+        if (startX == null) return;
+        const dx = x - startX;
+        const dy = y - startY;
+        if (!directionDecided && (Math.abs(dx) > 8 || Math.abs(dy) > 8)) {
+          directionDecided = true;
+          isOurSwipe = Math.abs(dx) > Math.abs(dy);
+        }
+        if (isOurSwipe) {
+          e.stopPropagation();
+          e.preventDefault();
+          this.swipeIndicator.classList.toggle("right", dx > 0);
+          this.swipeIndicator.style.opacity = Math.min(Math.abs(dx) / 100, 0.5);
+        }
+      };
+      const onEnd = (x, e) => {
+        this.swipeIndicator.style.opacity = 0;
+        if (isOurSwipe && startX != null) {
+          const dx = x - startX;
+          const threshold = Date.now() - startTime < 300 ? 30 : 50;
+          if (Math.abs(dx) >= threshold) {
+            dx > 0 ? this.prevSlide() : this.nextSlide();
+            this.haptic("medium");
+          }
+          e.stopPropagation();
+          e.preventDefault();
+        }
+        startX = startY = null;
+        isOurSwipe = false;
+        directionDecided = false;
+      };
+      this.imageLink.addEventListener("touchstart", (e) => {
+        onStart(e.touches[0].clientX, e.touches[0].clientY, e);
+      }, { passive: false, capture: true });
+      this.imageLink.addEventListener("touchmove", (e) => {
+        onMove(e.touches[0].clientX, e.touches[0].clientY, e);
+      }, { passive: false, capture: true });
+      this.imageLink.addEventListener("touchend", (e) => {
+        onEnd(e.changedTouches[0].clientX, e);
+      }, { passive: false, capture: true });
+      let mouseDown = false;
+      this.imageLink.addEventListener("mousedown", (e) => {
+        mouseDown = true;
+        onStart(e.clientX, e.clientY, e);
+        e.preventDefault();
+        e.stopPropagation();
+      }, { capture: true });
+      this.imageLink.addEventListener("mousemove", (e) => {
+        if (mouseDown) onMove(e.clientX, e.clientY, e);
+      }, { capture: true });
+      window.addEventListener("mouseup", (e) => {
+        if (mouseDown) {
+          mouseDown = false;
+          onEnd(e.clientX, e);
+        }
+      });
     }
-    cart-addons-slider .s-product-card-content .s-product-card-sale-price h4,
-    cart-addons-slider .s-product-card-content .s-product-card-sale-price span {
-      font-size: 0.75rem;
-      line-height: 1rem;
+    setupLazyImageLoad() {
+      const observer = new IntersectionObserver((entries) => {
+        if (entries[0].isIntersecting && !this.imagesLoaded) {
+          this.imagesLoaded = true;
+          observer.disconnect();
+          this.loadImages();
+        }
+      }, { rootMargin: "300px" });
+      observer.observe(this.imageWrapper);
     }
-    cart-addons-slider .s-product-card-content .s-product-card-content-footer {
-      margin-top: 0.125rem;
+    async loadImages() {
+      const data = await fetchImages(this.productId);
+      if (!data?.images?.length) {
+        this.dotsContainer.style.display = "none";
+        return;
+      }
+      const sorted = data.images.filter((img) => img?.url).sort((a, b) => (a.sort || 0) - (b.sort || 0)).slice(0, 2);
+      if (sorted.length === 0) {
+        this.dotsContainer.style.display = "none";
+        return;
+      }
+      this.images = sorted;
+      sorted.forEach((imgData, i) => {
+        const img = document.createElement("img");
+        img.className = "product-slider-image";
+        img.dataset.index = i + 1;
+        img.alt = imgData.alt || "Product image";
+        img.loading = "lazy";
+        img.src = imgData.url;
+        img.onerror = () => {
+          img.remove();
+          const dot = this.dotsContainer.querySelector(`[data-index="${i + 1}"]`);
+          if (dot) dot.style.display = "none";
+          this.updateDotsVisibility();
+        };
+        this.imageLink.appendChild(img);
+      });
+      if (sorted.length < 2) {
+        const dot3 = this.dotsContainer.querySelector('[data-index="2"]');
+        if (dot3) dot3.style.display = "none";
+      }
+      this.dotsContainer.classList.add("has-images");
     }
-    cart-addons-slider .s-product-card-content .s-product-card-content-footer salla-button {
-      transform: scale(0.75);
-      margin-left: -0.75rem;
-      margin-right: -0.75rem;
-    }
-    cart-addons-slider .touch-indicator {
-      position: absolute;
-      bottom: 0;
-      left: 50%;
-      width: 2.5rem;
-      height: 0.25rem;
-      background-color: rgba(229, 231, 235, 1);
-      opacity: 0.6;
-      border-radius: 9999px;
-      transform: translateX(-50%);
-      margin-bottom: 0.25rem;
-    }
-    @media (min-width: 768px) {
-      cart-addons-slider .touch-indicator {
-        display: none;
+    updateDotsVisibility() {
+      const visibleDots = this.dotsContainer.querySelectorAll('.product-slider-dot:not([style*="display: none"])');
+      if (visibleDots.length <= 1) {
+        this.dotsContainer.classList.remove("has-images");
       }
     }
-  `,document.head.appendChild(c)}function R(){H();let c=()=>{let t=document.querySelector("#cart-submit");if(!t)return!1;let r=t.closest(".cart-submit-wrap")||t.parentElement,s=r?.parentElement||r;if(!s)return!1;if(s.querySelector("cart-addons-slider"))return!0;let i=document.createElement("cart-addons-slider");return i.className="cart-addons-wrapper",r&&s?s.insertBefore(i,r.nextSibling):s.appendChild(i),console.log("[Algolia Bundle] Injected cart addons slider"),!0};if(document.querySelector("cart-addons-slider")||c())return;new MutationObserver((t,r)=>{c()&&r.disconnect()}).observe(document.body,{childList:!0,subtree:!0})}_(()=>{V(),document.querySelector('[id^="product-"]')&&setTimeout(()=>{m.initialize(),console.log("\u2705 [Algolia Bundle] Product recommendations initialized")},3e3),(document.querySelector('form[id^="item-"]')||document.querySelector("#cart-submit"))&&setTimeout(R,500),console.log("\u2705 [Algolia Bundle] Loaded successfully")});document.addEventListener("salla::page::changed",()=>{m.reset(),setTimeout(()=>{m.initialize()},1e3),setTimeout(R,500)});document.addEventListener("theme::ready",()=>{if(!document.querySelector('[id^="product-"]'))return;let c=m.getProductId();c&&m.productId&&c===m.productId||c&&(console.log("[Algolia Bundle] New product detected via theme::ready, re-initializing"),m.reset(),setTimeout(()=>{m.initialize()},1e3))});})();
+    goToSlide(index) {
+      if (!this.images.length && index > 0) return;
+      this.currentSlide = index;
+      this.dotsContainer.querySelectorAll(".product-slider-dot").forEach((dot, i) => {
+        dot.classList.toggle("active", i === index);
+      });
+      const mainImg = this.imageLink.querySelector("img:not(.product-slider-image)");
+      const sliderImgs = this.imageLink.querySelectorAll(".product-slider-image");
+      if (index === 0) {
+        if (mainImg) mainImg.style.cssText = "visibility:visible;opacity:1;z-index:10;";
+        sliderImgs.forEach((img) => img.classList.remove("active"));
+      } else {
+        if (mainImg) mainImg.style.cssText = "visibility:hidden;opacity:0;z-index:5;";
+        sliderImgs.forEach((img) => {
+          img.classList.toggle("active", parseInt(img.dataset.index) === index);
+        });
+      }
+    }
+    prevSlide() {
+      const total = this.images.length + 1;
+      this.goToSlide((this.currentSlide - 1 + total) % total);
+    }
+    nextSlide() {
+      const total = this.images.length + 1;
+      this.goToSlide((this.currentSlide + 1) % total);
+    }
+    haptic(type) {
+      try {
+        navigator.vibrate?.(type === "light" ? 10 : 25);
+      } catch (e) {
+      }
+    }
+  };
+  new ProductCardEnhancer();
+
+  // index.js
+  window.productRecommendations = product_recommendations_default;
+  window.redisService = redisService;
+  var onReady = (fn) => document.readyState === "loading" ? document.addEventListener("DOMContentLoaded", fn) : fn();
+  function runHomepageInjection() {
+    if (!document.body.classList.contains("index")) {
+      console.log("[Algolia Bundle] Not on homepage, skipping category products injection");
+      return;
+    }
+    const ANCHOR_SELECTOR = ".app-inner";
+    const ELEMENT_TAG = "mahaba-category-products";
+    function injectElement() {
+      const anchor = document.querySelector(ANCHOR_SELECTOR);
+      if (anchor && !anchor.querySelector(ELEMENT_TAG)) {
+        try {
+          console.log(`[Algolia Bundle] Found ${ANCHOR_SELECTOR}, injecting ${ELEMENT_TAG}...`);
+          const newElement = document.createElement(ELEMENT_TAG);
+          const footer = document.querySelector(".store-footer");
+          if (footer) {
+            anchor.insertBefore(newElement, footer);
+          } else {
+            anchor.appendChild(newElement);
+          }
+          console.log("\u2705 [Algolia Bundle] Homepage category component injected successfully");
+          return true;
+        } catch (e) {
+          console.error("[Algolia Bundle] Error during injection:", e);
+          return true;
+        }
+      }
+      return false;
+    }
+    if (injectElement()) {
+      return;
+    }
+    console.log(`[Algolia Bundle] ${ANCHOR_SELECTOR} not found, waiting for async load...`);
+    const observer = new MutationObserver((mutations, obs) => {
+      const hasAddedNodes = mutations.some((m) => m.addedNodes.length > 0);
+      if (hasAddedNodes && injectElement()) {
+        obs.disconnect();
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
+  onReady(() => {
+    runHomepageInjection();
+    const isProductPage = document.querySelector('[id^="product-"]');
+    if (isProductPage) {
+      setTimeout(() => {
+        product_recommendations_default.initialize();
+        console.log("\u2705 [Algolia Bundle] Product recommendations initialized");
+      }, 3e3);
+    }
+    console.log("\u2705 [Algolia Bundle] Loaded successfully");
+  });
+  document.addEventListener("salla::page::changed", () => {
+    product_recommendations_default.reset();
+    setTimeout(() => {
+      product_recommendations_default.initialize();
+    }, 1e3);
+  });
+  document.addEventListener("theme::ready", () => {
+    if (!document.querySelector('[id^="product-"]')) return;
+    const currentProductId = product_recommendations_default.getProductId();
+    if (currentProductId && product_recommendations_default.productId && currentProductId === product_recommendations_default.productId) {
+      return;
+    }
+    if (currentProductId) {
+      console.log("[Algolia Bundle] New product detected via theme::ready, re-initializing");
+      product_recommendations_default.reset();
+      setTimeout(() => {
+        product_recommendations_default.initialize();
+      }, 1e3);
+    }
+  });
+})();

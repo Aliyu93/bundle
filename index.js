@@ -268,9 +268,10 @@ onReady(() => {
   }
 
   // 3. Cart page: Ensure cart addons slider exists
-  if (document.querySelector('form[id^="item-"]') || document.querySelector('#cart-submit')) {
-    setTimeout(runCartAddonsInjection, 500);
-  }
+  // DISABLED: Causing mobile checkout issues - redirecting to product pages
+  // if (document.querySelector('form[id^="item-"]') || document.querySelector('#cart-submit')) {
+  //   setTimeout(runCartAddonsInjection, 500);
+  // }
 
   console.log('✅ [Algolia Bundle] Loaded successfully');
 });
@@ -281,7 +282,8 @@ document.addEventListener('salla::page::changed', () => {
     productRecommendations.initialize();
   }, 1000);
 
-  setTimeout(runCartAddonsInjection, 500);
+  // DISABLED: Causing mobile checkout issues
+  // setTimeout(runCartAddonsInjection, 500);
 });
 
 // Fallback: Also listen for theme::ready (fires on every page load)
