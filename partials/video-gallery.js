@@ -382,6 +382,12 @@ class VideoGalleryComponent extends HTMLElement {
 
             /* Responsive - smaller controls on mobile */
             @media (max-width: 767px) {
+                /* Force slide width to show 2.25 videos - scoped to video gallery only */
+                .video-gallery-swiper .swiper-slide {
+                    width: calc((100% - 10px) / 2.25) !important;
+                    flex-shrink: 0 !important;
+                }
+
                 .video-overlay .play-button,
                 .video-overlay .expand-button {
                     width: 36px;
@@ -429,6 +435,10 @@ class VideoGalleryComponent extends HTMLElement {
 
             /* Small phones - even more compact */
             @media (max-width: 375px) {
+                .video-gallery-swiper .swiper-slide {
+                    width: calc((100% - 8px) / 2.25) !important;
+                }
+
                 .video-item {
                     height: 250px;
                 }
