@@ -1373,11 +1373,11 @@
     constructor() {
       super();
       this.videos = [
-        { videoId: "5c674d0e8f966c603fc6d0045b713869", productId: 258399638, productName: "\u0641\u0633\u062A\u0627\u0646 \u0633\u0647\u0631\u0629 \u0637\u0648\u064A\u0644", productPrice: "\u0664\u0665\u0660 \u0631.\u0633" },
-        { videoId: "0012cc79a7fd459c9389670ba37c6b1b", productId: 823750915, productName: "\u0639\u0628\u0627\u064A\u0629 \u0645\u0637\u0631\u0632\u0629 \u0641\u0627\u062E\u0631\u0629", productPrice: "\u0666\u0668\u0660 \u0631.\u0633" },
-        { videoId: "939af62bb2f7e551b14c237b02cd6493", productId: 275656778, productName: "\u0637\u0642\u0645 \u0643\u0627\u062C\u0648\u0627\u0644 \u0623\u0646\u064A\u0642", productPrice: "\u0663\u0662\u0660 \u0631.\u0633" },
-        { videoId: "498113e070bbef6e76ad35058dc92071", productId: 854730525, productName: "\u062C\u0627\u0643\u064A\u062A \u0635\u0648\u0641 \u0634\u062A\u0648\u064A", productPrice: "\u0665\u0665\u0660 \u0631.\u0633" },
-        { videoId: "ad277fe9aae194be61f6b1b5ea5945ad", productId: 890636222, productName: "\u0628\u0644\u0648\u0632\u0629 \u062D\u0631\u064A\u0631 \u0646\u0627\u0639\u0645\u0629", productPrice: "\u0662\u0668\u0660 \u0631.\u0633" }
+        { videoId: "5c674d0e8f966c603fc6d0045b713869", productId: 258399638, productName: "\u0639\u0628\u0627\u064A\u0629 \u0634\u062A\u0648\u064A\u0629 \u0645\u062E\u0645\u0644 \u0628\u062A\u0637\u0631\u064A\u0632 \u0648\u0631\u062F", productPrice: "349.60 \u0631.\u0633" },
+        { videoId: "0012cc79a7fd459c9389670ba37c6b1b", productId: 823750915, productName: "\u062C\u0644\u0627\u0628\u064A\u0629 \u0634\u062A\u0648\u064A\u0629 \u0645\u062E\u0645\u0644 \u0643\u062D\u0644\u064A", productPrice: "449.65 \u0631.\u0633" },
+        { videoId: "939af62bb2f7e551b14c237b02cd6493", productId: 275656778, productName: "\u0639\u0628\u0627\u064A\u0629 \u0643\u0644\u0648\u0634 \u0645\u0637\u0631\u0632\u0629 \u0628\u0627\u0644\u0643\u0627\u0645\u0644", productPrice: "299 \u0631.\u0633" },
+        { videoId: "498113e070bbef6e76ad35058dc92071", productId: 854730525, productName: "\u0639\u0628\u0627\u064A\u0629 \u0645\u062E\u0645\u0644 \u0645\u0639 \u062F\u0627\u0646\u062A\u064A\u0644", productPrice: "299 \u0631.\u0633" },
+        { videoId: "ad277fe9aae194be61f6b1b5ea5945ad", productId: 890636222, productName: "\u0639\u0628\u0627\u064A\u0629 \u0645\u062E\u0645\u0644 \u0628\u0627\u0643\u0645\u0627\u0645 \u0645\u0637\u0631\u0632\u0629", productPrice: "349.60 \u0631.\u0633" }
       ];
       this.swiper = null;
       this.observer = null;
@@ -1400,8 +1400,8 @@
         autoplay: "true",
         muted: "true",
         loop: "true",
-        controls: "true",
-        // Use Cloudflare native controls
+        controls: "false",
+        // Hidden controls, click to toggle play/pause
         preload: "metadata"
       });
       return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;

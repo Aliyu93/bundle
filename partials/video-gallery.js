@@ -12,11 +12,11 @@ class VideoGalleryComponent extends HTMLElement {
         super();
         // Video + Product mapping with static product info
         this.videos = [
-            { videoId: '5c674d0e8f966c603fc6d0045b713869', productId: 258399638, productName: 'فستان سهرة طويل', productPrice: '٤٥٠ ر.س' },
-            { videoId: '0012cc79a7fd459c9389670ba37c6b1b', productId: 823750915, productName: 'عباية مطرزة فاخرة', productPrice: '٦٨٠ ر.س' },
-            { videoId: '939af62bb2f7e551b14c237b02cd6493', productId: 275656778, productName: 'طقم كاجوال أنيق', productPrice: '٣٢٠ ر.س' },
-            { videoId: '498113e070bbef6e76ad35058dc92071', productId: 854730525, productName: 'جاكيت صوف شتوي', productPrice: '٥٥٠ ر.س' },
-            { videoId: 'ad277fe9aae194be61f6b1b5ea5945ad', productId: 890636222, productName: 'بلوزة حرير ناعمة', productPrice: '٢٨٠ ر.س' },
+            { videoId: '5c674d0e8f966c603fc6d0045b713869', productId: 258399638, productName: 'عباية شتوية مخمل بتطريز ورد', productPrice: '349.60 ر.س' },
+            { videoId: '0012cc79a7fd459c9389670ba37c6b1b', productId: 823750915, productName: 'جلابية شتوية مخمل كحلي', productPrice: '449.65 ر.س' },
+            { videoId: '939af62bb2f7e551b14c237b02cd6493', productId: 275656778, productName: 'عباية كلوش مطرزة بالكامل', productPrice: '299 ر.س' },
+            { videoId: '498113e070bbef6e76ad35058dc92071', productId: 854730525, productName: 'عباية مخمل مع دانتيل', productPrice: '299 ر.س' },
+            { videoId: 'ad277fe9aae194be61f6b1b5ea5945ad', productId: 890636222, productName: 'عباية مخمل باكمام مطرزة', productPrice: '349.60 ر.س' },
         ];
         this.swiper = null;
         this.observer = null;
@@ -42,7 +42,7 @@ class VideoGalleryComponent extends HTMLElement {
             autoplay: 'true',
             muted: 'true',
             loop: 'true',
-            controls: 'true',  // Use Cloudflare native controls
+            controls: 'false',  // Hidden controls, click to toggle play/pause
             preload: 'metadata'
         });
         return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;
