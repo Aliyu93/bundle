@@ -1368,692 +1368,6 @@
     customElements.define("mahaba-category-products", CategoryProductsComponent);
   }
 
-  // partials/video-gallery.js
-  var VideoGalleryComponent = class extends HTMLElement {
-    constructor() {
-      super();
-      this.videos = [
-        { videoId: "5c674d0e8f966c603fc6d0045b713869", productId: 258399638, productName: "\u0639\u0628\u0627\u064A\u0629 \u0634\u062A\u0648\u064A\u0629 \u0645\u062E\u0645\u0644 \u0628\u062A\u0637\u0631\u064A\u0632 \u0648\u0631\u062F", productPrice: "349.60 \u0631.\u0633" },
-        { videoId: "0012cc79a7fd459c9389670ba37c6b1b", productId: 823750915, productName: "\u062C\u0644\u0627\u0628\u064A\u0629 \u0634\u062A\u0648\u064A\u0629 \u0645\u062E\u0645\u0644 \u0643\u062D\u0644\u064A", productPrice: "449.65 \u0631.\u0633" },
-        { videoId: "939af62bb2f7e551b14c237b02cd6493", productId: 275656778, productName: "\u0639\u0628\u0627\u064A\u0629 \u0643\u0644\u0648\u0634 \u0645\u0637\u0631\u0632\u0629 \u0628\u0627\u0644\u0643\u0627\u0645\u0644", productPrice: "299 \u0631.\u0633" },
-        { videoId: "498113e070bbef6e76ad35058dc92071", productId: 854730525, productName: "\u0639\u0628\u0627\u064A\u0629 \u0645\u062E\u0645\u0644 \u0645\u0639 \u062F\u0627\u0646\u062A\u064A\u0644", productPrice: "299 \u0631.\u0633" },
-        { videoId: "ad277fe9aae194be61f6b1b5ea5945ad", productId: 890636222, productName: "\u0639\u0628\u0627\u064A\u0629 \u0645\u062E\u0645\u0644 \u0628\u0627\u0643\u0645\u0627\u0645 \u0645\u0637\u0631\u0632\u0629", productPrice: "349.60 \u0631.\u0633" }
-      ];
-      this.swiper = null;
-      this.observer = null;
-      this.activeVideoIndex = -1;
-    }
-    connectedCallback() {
-      this.loadCloudflareSDK();
-      this.injectStyles();
-      this.render();
-      this.initSwiper();
-      this.setupIntersectionObserver();
-      this.setupEventListeners();
-      this.setupClickToPlay();
-      this.refreshLightbox();
-    }
-    loadCloudflareSDK() {
-      if (!document.getElementById("cf-stream-sdk")) {
-        const script = document.createElement("script");
-        script.id = "cf-stream-sdk";
-        script.src = "https://embed.cloudflarestream.com/embed/sdk.latest.js";
-        document.head.appendChild(script);
-      }
-    }
-    setupClickToPlay() {
-      this.querySelectorAll(".video-item").forEach((item) => {
-        item.style.cursor = "pointer";
-        item.addEventListener("click", (e) => {
-          if (e.target.closest(".video-product-footer")) return;
-          const iframe = item.querySelector("iframe");
-          if (iframe && typeof Stream !== "undefined") {
-            const player = Stream(iframe);
-            if (player.paused) {
-              player.play();
-            } else {
-              player.pause();
-            }
-          }
-        });
-      });
-    }
-    disconnectedCallback() {
-      this.observer?.disconnect();
-      this.swiper?.destroy();
-    }
-    getEmbedUrl(videoId) {
-      const params = new URLSearchParams({
-        autoplay: "true",
-        muted: "true",
-        loop: "true",
-        controls: "false",
-        preload: "metadata"
-      });
-      return `https://iframe.videodelivery.net/${videoId}?${params.toString()}`;
-    }
-    getLightboxUrl(videoId) {
-      return `https://iframe.videodelivery.net/${videoId}?autoplay=true&controls=true`;
-    }
-    injectStyles() {
-      if (document.getElementById("mahaba-video-gallery-styles")) return;
-      const style = document.createElement("style");
-      style.id = "mahaba-video-gallery-styles";
-      style.textContent = `
-            mahaba-video-gallery {
-                display: block;
-                max-width: 1280px;
-                margin: 0 auto;
-                padding: 0 1rem;
-            }
-
-            mahaba-video-gallery .video-gallery-section {
-                margin-bottom: 2rem;
-            }
-
-            mahaba-video-gallery .video-gallery-header {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-                margin-bottom: 1rem;
-                padding-bottom: 0.5rem;
-                border-bottom: 1px solid rgba(212, 172, 132, 0.1);
-            }
-
-            mahaba-video-gallery .video-gallery-title {
-                font-size: 1.25rem;
-                font-weight: 600;
-                color: #d4ac84;
-                margin: 0;
-            }
-
-            mahaba-video-gallery .videos-gallery-container {
-                position: relative;
-            }
-
-            mahaba-video-gallery .video-gallery-swiper {
-                overflow: hidden;
-            }
-
-            mahaba-video-gallery .video-gallery-swiper .swiper-wrapper {
-                display: flex;
-            }
-
-            mahaba-video-gallery .video-gallery-swiper .swiper-slide {
-                flex-shrink: 0;
-                height: auto;
-            }
-
-            /* Card container - holds video + product info stacked */
-            mahaba-video-gallery .video-slide-card {
-                display: flex;
-                flex-direction: column;
-                border-radius: 12px;
-                overflow: hidden;
-                background: #fff;
-            }
-
-            /* Video container - fixed height on mobile, aspect-ratio on tablet+ */
-            mahaba-video-gallery .video-item {
-                position: relative;
-                background: #000;
-                height: 280px;
-                border-radius: 12px 12px 0 0;
-                overflow: hidden;
-            }
-
-            mahaba-video-gallery .video-wrapper {
-                position: relative;
-                width: 100%;
-                height: 100%;
-                overflow: hidden;  /* Crop scaled iframe edges */
-            }
-
-            mahaba-video-gallery .video-wrapper iframe {
-                position: absolute;
-                top: 0;
-                left: 0;
-                width: 100%;
-                height: 100%;
-                border: none;
-                pointer-events: auto;
-                transform: scale(1.15);  /* Scale up to crop black bars */
-                transform-origin: center center;
-            }
-
-            /* Hide custom overlay - using Cloudflare native controls instead */
-            /* SCOPED to mahaba-video-gallery only - do not affect rest of page */
-            mahaba-video-gallery .video-overlay,
-            mahaba-video-gallery .video-controls {
-                display: none !important;
-            }
-
-            /* Overlay - positioned within video-wrapper only (HIDDEN) */
-            mahaba-video-gallery .video-overlay {
-                position: absolute;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                gap: 1rem;
-                background: rgba(0, 0, 0, 0.2);
-                opacity: 0;
-                transition: opacity 0.3s ease;
-                z-index: 10;
-            }
-
-            mahaba-video-gallery .video-item:hover .video-overlay,
-            mahaba-video-gallery .video-overlay.show {
-                opacity: 1;
-            }
-
-            mahaba-video-gallery .video-overlay .play-button,
-            mahaba-video-gallery .video-overlay .expand-button {
-                width: 44px;
-                height: 44px;
-                border-radius: 50%;
-                background: rgba(255, 255, 255, 0.9);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                transition: transform 0.2s ease, background 0.2s ease;
-            }
-
-            mahaba-video-gallery .video-overlay .play-button:hover,
-            mahaba-video-gallery .video-overlay .expand-button:hover {
-                transform: scale(1.1);
-                background: #fff;
-            }
-
-            mahaba-video-gallery .video-overlay .play-button i,
-            mahaba-video-gallery .video-overlay .expand-button i {
-                font-size: 1.1rem;
-                color: #333;
-            }
-
-            /* Controls - at bottom of video only */
-            mahaba-video-gallery .video-controls {
-                position: absolute;
-                bottom: 0;
-                left: 0;
-                right: 0;
-                padding: 0.5rem;
-                background: linear-gradient(transparent, rgba(0, 0, 0, 0.6));
-                display: flex;
-                justify-content: flex-start;
-                gap: 0.5rem;
-                z-index: 10;
-                opacity: 0;
-                transition: opacity 0.3s ease;
-            }
-
-            mahaba-video-gallery .video-item:hover .video-controls,
-            mahaba-video-gallery .video-controls.show {
-                opacity: 1;
-            }
-
-            mahaba-video-gallery .video-controls .control-btn {
-                width: 32px;
-                height: 32px;
-                border-radius: 50%;
-                background: rgba(255, 255, 255, 0.2);
-                border: none;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                cursor: pointer;
-                transition: background 0.2s ease;
-            }
-
-            mahaba-video-gallery .video-controls .control-btn:hover {
-                background: rgba(255, 255, 255, 0.4);
-            }
-
-            mahaba-video-gallery .video-controls .control-btn i {
-                font-size: 0.875rem;
-                color: #fff;
-            }
-
-            mahaba-video-gallery .video-controls .control-btn.playing .sicon-play {
-                display: none;
-            }
-
-            mahaba-video-gallery .video-controls .control-btn.playing .sicon-pause {
-                display: inline;
-            }
-
-            mahaba-video-gallery .video-controls .control-btn:not(.playing) .sicon-play {
-                display: inline;
-            }
-
-            mahaba-video-gallery .video-controls .control-btn:not(.playing) .sicon-pause {
-                display: none;
-            }
-
-            mahaba-video-gallery .video-controls .mute-btn.muted .sicon-volume-high {
-                display: none;
-            }
-
-            mahaba-video-gallery .video-controls .mute-btn.muted .sicon-volume-mute {
-                display: inline;
-            }
-
-            mahaba-video-gallery .video-controls .mute-btn:not(.muted) .sicon-volume-high {
-                display: inline;
-            }
-
-            mahaba-video-gallery .video-controls .mute-btn:not(.muted) .sicon-volume-mute {
-                display: none;
-            }
-
-            mahaba-video-gallery .video-gallery-swiper .swiper-pagination {
-                position: relative;
-                margin-top: 1rem;
-                display: flex;
-                justify-content: center;
-                gap: 0.5rem;
-            }
-
-            mahaba-video-gallery .video-gallery-swiper .swiper-pagination-bullet {
-                width: 8px;
-                height: 8px;
-                border-radius: 50%;
-                background: rgba(212, 172, 132, 0.3);
-                cursor: pointer;
-                transition: background 0.2s ease, transform 0.2s ease;
-            }
-
-            mahaba-video-gallery .video-gallery-swiper .swiper-pagination-bullet-active {
-                background: #d4ac84;
-                transform: scale(1.2);
-            }
-
-            /* Product Footer - Modern Minimal Design */
-            mahaba-video-gallery .video-product-footer {
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-                padding: 0.75rem;
-                background: #ffffff;
-                border-radius: 0 0 12px 12px;
-                border-top: 1px solid rgba(212, 172, 132, 0.15);
-                gap: 0.5rem;
-                min-height: 56px;
-                position: relative;
-                z-index: 20;
-            }
-
-            mahaba-video-gallery .video-product-footer__content {
-                flex: 1;
-                display: flex;
-                flex-direction: column;
-                gap: 0.125rem;
-                min-width: 0;
-                text-align: right;
-            }
-
-            mahaba-video-gallery .video-product-footer__title {
-                font-size: 0.8125rem;
-                font-weight: 600;
-                color: #2d2d2d;
-                line-height: 1.3;
-                margin: 0;
-                white-space: nowrap;
-                overflow: hidden;
-                text-overflow: ellipsis;
-                transition: color 0.2s ease;
-            }
-
-            mahaba-video-gallery .video-product-footer__price {
-                font-size: 0.75rem;
-                font-weight: 500;
-                color: #d4ac84;
-                line-height: 1.2;
-            }
-
-            mahaba-video-gallery .video-product-footer__cta {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 36px;
-                height: 36px;
-                min-width: 36px;
-                background: linear-gradient(135deg, #d4ac84 0%, #c49b73 100%);
-                border-radius: 8px;
-                color: #ffffff;
-                text-decoration: none;
-                transition: all 0.25s ease;
-                box-shadow: 0 2px 8px rgba(212, 172, 132, 0.25);
-            }
-
-            mahaba-video-gallery .video-product-footer__cta i {
-                font-size: 0.875rem;
-                transition: transform 0.2s ease;
-            }
-
-            mahaba-video-gallery .video-product-footer:hover .video-product-footer__title {
-                color: #d4ac84;
-            }
-
-            mahaba-video-gallery .video-product-footer__cta:hover {
-                background: linear-gradient(135deg, #c49b73 0%, #b38a62 100%);
-                transform: translateX(-2px);
-                box-shadow: 0 4px 12px rgba(212, 172, 132, 0.35);
-            }
-
-            mahaba-video-gallery .video-product-footer__cta:hover i {
-                transform: translateX(-2px);
-            }
-
-            mahaba-video-gallery .video-product-footer__cta:active {
-                transform: scale(0.95);
-            }
-
-            /* Card shadow enhancement */
-            mahaba-video-gallery .video-slide-card {
-                box-shadow: 0 2px 12px rgba(0, 0, 0, 0.06);
-                transition: box-shadow 0.3s ease;
-            }
-
-            mahaba-video-gallery .video-slide-card:hover {
-                box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
-            }
-
-            /* Tablet and up - use aspect-ratio for proper 9:16 */
-            @media (min-width: 768px) {
-                mahaba-video-gallery .video-item {
-                    height: auto;
-                    aspect-ratio: 9 / 16;
-                }
-            }
-
-            /* Responsive - smaller controls on mobile */
-            @media (max-width: 767px) {
-                /* Force slide width to show 2.25 videos - using viewport units */
-                mahaba-video-gallery .video-gallery-swiper .swiper-slide {
-                    width: calc((100vw - 32px) / 2.25) !important;
-                    flex-shrink: 0 !important;
-                }
-
-                mahaba-video-gallery .video-overlay .play-button,
-                mahaba-video-gallery .video-overlay .expand-button {
-                    width: 36px;
-                    height: 36px;
-                }
-
-                mahaba-video-gallery .video-overlay .play-button i,
-                mahaba-video-gallery .video-overlay .expand-button i {
-                    font-size: 0.9rem;
-                }
-
-                mahaba-video-gallery .video-controls .control-btn {
-                    width: 28px;
-                    height: 28px;
-                }
-
-                mahaba-video-gallery .video-controls .control-btn i {
-                    font-size: 0.75rem;
-                }
-
-                mahaba-video-gallery .video-product-footer {
-                    padding: 0.625rem;
-                    min-height: 48px;
-                }
-
-                mahaba-video-gallery .video-product-footer__title {
-                    font-size: 0.75rem;
-                }
-
-                mahaba-video-gallery .video-product-footer__price {
-                    font-size: 0.6875rem;
-                }
-
-                mahaba-video-gallery .video-product-footer__cta {
-                    width: 32px;
-                    height: 32px;
-                    min-width: 32px;
-                    border-radius: 6px;
-                }
-
-                mahaba-video-gallery .video-product-footer__cta i {
-                    font-size: 0.75rem;
-                }
-            }
-
-            /* Small phones - even more compact */
-            @media (max-width: 375px) {
-                mahaba-video-gallery .video-gallery-swiper .swiper-slide {
-                    width: calc((100vw - 32px) / 2.25) !important;
-                }
-
-                mahaba-video-gallery .video-item {
-                    height: 250px;
-                }
-            }
-        `;
-      document.head.appendChild(style);
-    }
-    render() {
-      const slidesHtml = this.videos.map((video, index) => `
-            <div class="swiper-slide">
-                <div class="video-slide-card">
-                    <div class="video-item" data-video-id="${video.videoId}" data-video-index="${index}">
-                        <div class="video-wrapper">
-                            <iframe
-                                src="${this.getEmbedUrl(video.videoId)}"
-                                allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture"
-                                allowfullscreen
-                                loading="lazy"
-                            ></iframe>
-                            <a
-                                data-fslightbox="video-gallery"
-                                data-type="video"
-                                href="${this.getLightboxUrl(video.videoId)}"
-                                class="video-lightbox-trigger"
-                                style="display: none;"
-                            ></a>
-                        </div>
-                        <div class="video-overlay">
-                            <div class="play-button" data-action="play" role="button" tabindex="0" aria-label="\u062A\u0634\u063A\u064A\u0644 \u0627\u0644\u0641\u064A\u062F\u064A\u0648">
-                                <i class="sicon-play" aria-hidden="true"></i>
-                            </div>
-                            <div class="expand-button" data-action="expand" role="button" tabindex="0" aria-label="\u062A\u0648\u0633\u064A\u0639 \u0627\u0644\u0641\u064A\u062F\u064A\u0648">
-                                <i class="sicon-expand" aria-hidden="true"></i>
-                            </div>
-                        </div>
-                        <div class="video-controls">
-                            <button class="control-btn pause-btn playing muted" data-action="toggle-play" aria-label="\u0625\u064A\u0642\u0627\u0641/\u062A\u0634\u063A\u064A\u0644">
-                                <i class="sicon-play" aria-hidden="true"></i>
-                                <i class="sicon-pause" aria-hidden="true"></i>
-                            </button>
-                            <button class="control-btn mute-btn muted" data-action="toggle-mute" aria-label="\u0643\u062A\u0645/\u0625\u0644\u063A\u0627\u0621 \u0643\u062A\u0645 \u0627\u0644\u0635\u0648\u062A">
-                                <i class="sicon-volume-high" aria-hidden="true"></i>
-                                <i class="sicon-volume-mute" aria-hidden="true"></i>
-                            </button>
-                        </div>
-                    </div>
-                    <!-- Product Footer - Modern minimal design -->
-                    ${video.productId ? `
-                        <div class="video-product-footer">
-                            <div class="video-product-footer__content">
-                                <h4 class="video-product-footer__title">${video.productName || "\u0645\u0646\u062A\u062C"}</h4>
-                                <span class="video-product-footer__price">${video.productPrice || ""}</span>
-                            </div>
-                            <a href="https://darlena.com/product/p${video.productId}"
-                               class="video-product-footer__cta"
-                               aria-label="\u0639\u0631\u0636 \u0627\u0644\u0645\u0646\u062A\u062C: ${video.productName || "\u0645\u0646\u062A\u062C"}">
-                                <i class="sicon-arrow-left" aria-hidden="true"></i>
-                            </a>
-                        </div>
-                    ` : ""}
-                </div>
-            </div>
-        `).join("");
-      this.innerHTML = `
-            <section class="video-gallery-section">
-                <div class="video-gallery-header">
-                    <h2 class="video-gallery-title">\u0641\u064A\u062F\u064A\u0648\u0647\u0627\u062A</h2>
-                </div>
-                <div class="videos-gallery-container" data-view-type="slider" data-aspect-ratio="vertical">
-                    <div class="swiper video-gallery-swiper" dir="rtl">
-                        <div class="swiper-wrapper">
-                            ${slidesHtml}
-                        </div>
-                        <div class="swiper-pagination"></div>
-                    </div>
-                </div>
-            </section>
-        `;
-    }
-    initSwiper() {
-      const swiperEl = this.querySelector(".video-gallery-swiper");
-      if (!swiperEl || typeof Swiper === "undefined") {
-        console.warn("[VideoGallery] Swiper not available");
-        return;
-      }
-      this.swiper = new Swiper(swiperEl, {
-        direction: "horizontal",
-        slidesPerView: 2.25,
-        spaceBetween: 8,
-        pagination: {
-          el: ".swiper-pagination",
-          clickable: true
-        },
-        breakpoints: {
-          340: { slidesPerView: 2.25, spaceBetween: 8 },
-          768: { slidesPerView: 3.5, spaceBetween: 10 },
-          1024: { slidesPerView: 5, spaceBetween: 10 }
-        }
-      });
-    }
-    setupIntersectionObserver() {
-      this.observer = new IntersectionObserver((entries) => {
-        entries.forEach((entry) => {
-          const videoItem = entry.target;
-          const iframe = videoItem.querySelector("iframe");
-          if (entry.isIntersecting && entry.intersectionRatio >= 0.5) {
-            this.setVideoPlaying(iframe, true);
-            videoItem.querySelector(".pause-btn")?.classList.add("playing");
-          } else {
-            this.setVideoPlaying(iframe, false);
-            videoItem.querySelector(".pause-btn")?.classList.remove("playing");
-          }
-        });
-      }, {
-        threshold: [0, 0.5, 1],
-        rootMargin: "0px"
-      });
-      this.querySelectorAll(".video-item").forEach((item) => {
-        this.observer.observe(item);
-      });
-    }
-    setVideoPlaying(iframe, playing) {
-      if (!iframe) return;
-      const currentSrc = iframe.src;
-      const url = new URL(currentSrc);
-      if (playing) {
-        url.searchParams.set("autoplay", "true");
-      } else {
-        url.searchParams.set("autoplay", "false");
-      }
-      if (iframe.src !== url.toString()) {
-        iframe.src = url.toString();
-      }
-    }
-    setVideoMuted(iframe, muted) {
-      if (!iframe) return;
-      const currentSrc = iframe.src;
-      const url = new URL(currentSrc);
-      url.searchParams.set("muted", muted ? "true" : "false");
-      if (iframe.src !== url.toString()) {
-        iframe.src = url.toString();
-      }
-    }
-    setupEventListeners() {
-      this.addEventListener("click", (e) => {
-        const target = e.target.closest("[data-action]");
-        if (!target) return;
-        const action = target.dataset.action;
-        const videoItem = target.closest(".video-item");
-        const iframe = videoItem?.querySelector("iframe");
-        switch (action) {
-          case "play":
-            this.handlePlay(videoItem, iframe);
-            break;
-          case "expand":
-            this.handleExpand(videoItem);
-            break;
-          case "toggle-play":
-            this.handleTogglePlay(target, iframe);
-            break;
-          case "toggle-mute":
-            this.handleToggleMute(target, iframe);
-            break;
-        }
-      });
-      this.addEventListener("keydown", (e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          const target = e.target.closest("[data-action]");
-          if (target) {
-            e.preventDefault();
-            target.click();
-          }
-        }
-      });
-    }
-    handlePlay(videoItem, iframe) {
-      const pauseBtn = videoItem?.querySelector(".pause-btn");
-      const isPlaying = pauseBtn?.classList.contains("playing");
-      if (isPlaying) {
-        this.setVideoPlaying(iframe, false);
-        pauseBtn?.classList.remove("playing");
-      } else {
-        this.setVideoPlaying(iframe, true);
-        pauseBtn?.classList.add("playing");
-      }
-    }
-    handleExpand(videoItem) {
-      const lightboxTrigger = videoItem?.querySelector(".video-lightbox-trigger");
-      if (lightboxTrigger) {
-        lightboxTrigger.click();
-      }
-    }
-    handleTogglePlay(button, iframe) {
-      const isPlaying = button.classList.contains("playing");
-      if (isPlaying) {
-        this.setVideoPlaying(iframe, false);
-        button.classList.remove("playing");
-      } else {
-        this.setVideoPlaying(iframe, true);
-        button.classList.add("playing");
-      }
-    }
-    handleToggleMute(button, iframe) {
-      const isMuted = button.classList.contains("muted");
-      if (isMuted) {
-        this.setVideoMuted(iframe, false);
-        button.classList.remove("muted");
-      } else {
-        this.setVideoMuted(iframe, true);
-        button.classList.add("muted");
-      }
-    }
-    refreshLightbox() {
-      if (typeof refreshFsLightbox === "function") {
-        setTimeout(() => {
-          refreshFsLightbox();
-        }, 100);
-      }
-    }
-  };
-  if (!customElements.get("mahaba-video-gallery")) {
-    customElements.define("mahaba-video-gallery", VideoGalleryComponent);
-  }
-
   // partials/product-recommendations.js
   var ProductRecommendations = class {
     constructor() {
@@ -3130,6 +2444,113 @@
   };
   new ProductCardEnhancer();
 
+  // partials/whatsapp-widget.js
+  var WhatsAppFloatingButton = class extends HTMLElement {
+    constructor() {
+      super();
+      this.phoneNumber = "966597818555";
+    }
+    connectedCallback() {
+      this.injectStyles();
+      this.render();
+    }
+    injectStyles() {
+      if (document.getElementById("whatsapp-widget-styles")) return;
+      const style = document.createElement("style");
+      style.id = "whatsapp-widget-styles";
+      style.textContent = `
+            whatsapp-floating-button {
+                display: block;
+                position: fixed;
+                bottom: 24px;
+                left: 20px;
+                z-index: 98;
+            }
+
+            whatsapp-floating-button .whatsapp-fab {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                width: 56px;
+                height: 56px;
+                background: #25D366;
+                border-radius: 50%;
+                box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+                transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+                text-decoration: none;
+            }
+
+            whatsapp-floating-button .whatsapp-fab:hover {
+                transform: scale(1.08);
+                background: #20bd5a;
+                box-shadow: 0 6px 16px rgba(37, 211, 102, 0.5);
+            }
+
+            whatsapp-floating-button .whatsapp-fab:active {
+                transform: scale(0.95);
+            }
+
+            whatsapp-floating-button .whatsapp-fab svg {
+                width: 28px;
+                height: 28px;
+                fill: #ffffff;
+            }
+
+            /* Mobile: Above sticky product bar + footer */
+            @media (max-width: 640px) {
+                whatsapp-floating-button {
+                    bottom: 120px;
+                    left: 16px;
+                }
+
+                whatsapp-floating-button .whatsapp-fab {
+                    width: 48px;
+                    height: 48px;
+                }
+
+                whatsapp-floating-button .whatsapp-fab svg {
+                    width: 24px;
+                    height: 24px;
+                }
+            }
+
+            /* Small mobile */
+            @media (max-width: 440px) {
+                whatsapp-floating-button {
+                    bottom: 100px;
+                }
+
+                whatsapp-floating-button .whatsapp-fab {
+                    width: 44px;
+                    height: 44px;
+                }
+
+                whatsapp-floating-button .whatsapp-fab svg {
+                    width: 22px;
+                    height: 22px;
+                }
+            }
+        `;
+      document.head.appendChild(style);
+    }
+    render() {
+      this.innerHTML = `
+            <a href="https://wa.me/${this.phoneNumber}"
+               target="_blank"
+               rel="noopener noreferrer"
+               class="whatsapp-fab"
+               aria-label="\u062A\u0648\u0627\u0635\u0644 \u0645\u0639\u0646\u0627 \u0639\u0628\u0631 \u0648\u0627\u062A\u0633\u0627\u0628">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
+                </svg>
+            </a>
+        `;
+    }
+  };
+  if (!customElements.get("whatsapp-floating-button")) {
+    customElements.define("whatsapp-floating-button", WhatsAppFloatingButton);
+  }
+
   // index.js
   window.productRecommendations = product_recommendations_default;
   window.redisService = redisService;
@@ -3177,63 +2598,17 @@
       subtree: true
     });
   }
-  function runVideoGalleryInjection() {
-    if (!document.body.classList.contains("index")) {
-      return;
-    }
-    const ELEMENT_TAG = "mahaba-video-gallery";
-    function injectElement() {
-      if (document.querySelector(ELEMENT_TAG)) {
-        return true;
-      }
-      const categoryProducts = document.querySelector("mahaba-category-products");
-      if (categoryProducts && categoryProducts.parentElement) {
-        const videoGallery = document.createElement(ELEMENT_TAG);
-        categoryProducts.parentElement.insertBefore(videoGallery, categoryProducts);
-        console.log("\u2705 [Algolia Bundle] Video gallery injected before category products");
-        return true;
-      }
-      const appInner = document.querySelector(".app-inner");
-      const footer = document.querySelector(".store-footer");
-      if (appInner) {
-        const videoGallery = document.createElement(ELEMENT_TAG);
-        if (footer) {
-          appInner.insertBefore(videoGallery, footer);
-        } else {
-          appInner.appendChild(videoGallery);
-        }
-        console.log("\u2705 [Algolia Bundle] Video gallery injected (fallback location)");
-        return true;
-      }
-      return false;
-    }
-    if (injectElement()) {
-      return;
-    }
-    console.log("[Algolia Bundle] Waiting for DOM to inject video gallery...");
-    const observer = new MutationObserver((mutations, obs) => {
-      const hasAddedNodes = mutations.some((m) => m.addedNodes.length > 0);
-      if (hasAddedNodes && injectElement()) {
-        obs.disconnect();
-      }
-    });
-    observer.observe(document.body, {
-      childList: true,
-      subtree: true
-    });
-    setTimeout(() => {
-      observer.disconnect();
-    }, 1e4);
-  }
   onReady(() => {
     runHomepageInjection();
-    setTimeout(runVideoGalleryInjection, 100);
     const isProductPage = document.querySelector('[id^="product-"]');
     if (isProductPage) {
       setTimeout(() => {
         product_recommendations_default.initialize();
         console.log("\u2705 [Algolia Bundle] Product recommendations initialized");
       }, 3e3);
+    }
+    if (!document.querySelector("whatsapp-floating-button")) {
+      document.body.appendChild(document.createElement("whatsapp-floating-button"));
     }
     console.log("\u2705 [Algolia Bundle] Loaded successfully");
   });

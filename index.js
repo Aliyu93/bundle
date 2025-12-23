@@ -13,12 +13,14 @@ import CartAddonsSlider from './components/CartAddonsSlider.js';
 import './components/AlgoliaRecommendationsSlider.js'; // Custom slider for product recommendations
 import './partials/product-ranking.js';       // Registers <product-ranking> custom element
 import './partials/category-products.js';     // Registers <mahaba-category-products> custom element
-import './partials/video-gallery.js';        // Registers <mahaba-video-gallery> custom element
+// DISABLED: Video gallery temporarily disabled
+// import './partials/video-gallery.js';        // Registers <mahaba-video-gallery> custom element
 import productRecommendations from './partials/product-recommendations.js';
 import './product-ranking-init.js';           // Sets up category/tag page ranking
 import './partials/youtube-url-transformer.js'; // YouTube URL to click-to-play
 import './partials/product-title-enhancer.js'; // Dynamic title sizing + truncation
 import './partials/product-card-enhancer.js'; // Multi-image slider for product cards
+import './partials/whatsapp-widget.js';      // WhatsApp floating button
 
 // Expose globals expected by legacy theme code
 window.productRecommendations = productRecommendations;
@@ -329,8 +331,8 @@ onReady(() => {
   runHomepageInjection();
 
   // 1b. Homepage: Inject video gallery (above category products)
-  // Slight delay to ensure category products is injected first
-  setTimeout(runVideoGalleryInjection, 100);
+  // DISABLED: Video gallery temporarily disabled
+  // setTimeout(runVideoGalleryInjection, 100);
 
   // 2. Product page: Initialize recommendations (works correctly, unchanged)
   const isProductPage = document.querySelector('[id^="product-"]');
@@ -347,6 +349,11 @@ onReady(() => {
   // if (document.querySelector('form[id^="item-"]') || document.querySelector('#cart-submit')) {
   //   setTimeout(runCartAddonsInjection, 500);
   // }
+
+  // 4. All pages: WhatsApp floating button
+  if (!document.querySelector('whatsapp-floating-button')) {
+    document.body.appendChild(document.createElement('whatsapp-floating-button'));
+  }
 
   console.log('✅ [Algolia Bundle] Loaded successfully');
 });
