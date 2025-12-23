@@ -2462,8 +2462,8 @@
             whatsapp-floating-button {
                 display: block;
                 position: fixed;
-                bottom: 24px;
-                left: 20px;
+                bottom: 100px;
+                left: 16px;
                 z-index: 98;
             }
 
@@ -2471,11 +2471,11 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 56px;
-                height: 56px;
+                width: 40px;
+                height: 40px;
                 background: #25D366;
                 border-radius: 50%;
-                box-shadow: 0 4px 12px rgba(37, 211, 102, 0.4);
+                box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);
                 transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
                 text-decoration: none;
             }
@@ -2483,7 +2483,7 @@
             whatsapp-floating-button .whatsapp-fab:hover {
                 transform: scale(1.08);
                 background: #20bd5a;
-                box-shadow: 0 6px 16px rgba(37, 211, 102, 0.5);
+                box-shadow: 0 4px 12px rgba(37, 211, 102, 0.45);
             }
 
             whatsapp-floating-button .whatsapp-fab:active {
@@ -2491,43 +2491,43 @@
             }
 
             whatsapp-floating-button .whatsapp-fab svg {
-                width: 28px;
-                height: 28px;
+                width: 20px;
+                height: 20px;
                 fill: #ffffff;
             }
 
-            /* Mobile: Above sticky product bar + footer */
+            /* Mobile: Well above sticky product bar + footer + apple pay */
             @media (max-width: 640px) {
                 whatsapp-floating-button {
-                    bottom: 120px;
-                    left: 16px;
+                    bottom: 200px;
+                    left: 12px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab {
-                    width: 48px;
-                    height: 48px;
+                    width: 36px;
+                    height: 36px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab svg {
-                    width: 24px;
-                    height: 24px;
+                    width: 18px;
+                    height: 18px;
                 }
             }
 
             /* Small mobile */
             @media (max-width: 440px) {
                 whatsapp-floating-button {
-                    bottom: 100px;
+                    bottom: 180px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab {
-                    width: 44px;
-                    height: 44px;
+                    width: 34px;
+                    height: 34px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab svg {
-                    width: 22px;
-                    height: 22px;
+                    width: 16px;
+                    height: 16px;
                 }
             }
         `;
