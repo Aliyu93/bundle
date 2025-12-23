@@ -2449,6 +2449,7 @@
     constructor() {
       super();
       this.phoneNumber = "966597818555";
+      this.defaultMessage = "\u0639\u0646\u062F\u064A \u0633\u0624\u0627\u0644 \u0639\u0646 \u0645\u0646\u062A\u062C \u0641\u064A \u0645\u0648\u0642\u0639 \u062F\u0627\u0631 \u0644\u064A\u0646\u0627 https://darlena.com";
     }
     connectedCallback() {
       this.injectStyles();
@@ -2471,11 +2472,11 @@
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 40px;
-                height: 40px;
+                width: 48px;
+                height: 48px;
                 background: #25D366;
                 border-radius: 50%;
-                box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);
+                box-shadow: 0 2px 10px rgba(37, 211, 102, 0.4);
                 transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
                 text-decoration: none;
             }
@@ -2483,7 +2484,7 @@
             whatsapp-floating-button .whatsapp-fab:hover {
                 transform: scale(1.08);
                 background: #20bd5a;
-                box-shadow: 0 4px 12px rgba(37, 211, 102, 0.45);
+                box-shadow: 0 4px 14px rgba(37, 211, 102, 0.5);
             }
 
             whatsapp-floating-button .whatsapp-fab:active {
@@ -2491,8 +2492,8 @@
             }
 
             whatsapp-floating-button .whatsapp-fab svg {
-                width: 20px;
-                height: 20px;
+                width: 24px;
+                height: 24px;
                 fill: #ffffff;
             }
 
@@ -2504,13 +2505,13 @@
                 }
 
                 whatsapp-floating-button .whatsapp-fab {
-                    width: 36px;
-                    height: 36px;
+                    width: 44px;
+                    height: 44px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab svg {
-                    width: 18px;
-                    height: 18px;
+                    width: 22px;
+                    height: 22px;
                 }
             }
 
@@ -2521,21 +2522,25 @@
                 }
 
                 whatsapp-floating-button .whatsapp-fab {
-                    width: 34px;
-                    height: 34px;
+                    width: 40px;
+                    height: 40px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab svg {
-                    width: 16px;
-                    height: 16px;
+                    width: 20px;
+                    height: 20px;
                 }
             }
         `;
       document.head.appendChild(style);
     }
+    getWhatsAppUrl() {
+      const encodedMessage = encodeURIComponent(this.defaultMessage);
+      return `https://wa.me/${this.phoneNumber}?text=${encodedMessage}`;
+    }
     render() {
       this.innerHTML = `
-            <a href="https://wa.me/${this.phoneNumber}"
+            <a href="${this.getWhatsAppUrl()}"
                target="_blank"
                rel="noopener noreferrer"
                class="whatsapp-fab"

@@ -8,6 +8,7 @@ class WhatsAppFloatingButton extends HTMLElement {
     constructor() {
         super();
         this.phoneNumber = '966597818555';
+        this.defaultMessage = 'عندي سؤال عن منتج في موقع دار لينا https://darlena.com';
     }
 
     connectedCallback() {
@@ -33,11 +34,11 @@ class WhatsAppFloatingButton extends HTMLElement {
                 display: flex;
                 align-items: center;
                 justify-content: center;
-                width: 40px;
-                height: 40px;
+                width: 48px;
+                height: 48px;
                 background: #25D366;
                 border-radius: 50%;
-                box-shadow: 0 2px 8px rgba(37, 211, 102, 0.35);
+                box-shadow: 0 2px 10px rgba(37, 211, 102, 0.4);
                 transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
                 text-decoration: none;
             }
@@ -45,7 +46,7 @@ class WhatsAppFloatingButton extends HTMLElement {
             whatsapp-floating-button .whatsapp-fab:hover {
                 transform: scale(1.08);
                 background: #20bd5a;
-                box-shadow: 0 4px 12px rgba(37, 211, 102, 0.45);
+                box-shadow: 0 4px 14px rgba(37, 211, 102, 0.5);
             }
 
             whatsapp-floating-button .whatsapp-fab:active {
@@ -53,8 +54,8 @@ class WhatsAppFloatingButton extends HTMLElement {
             }
 
             whatsapp-floating-button .whatsapp-fab svg {
-                width: 20px;
-                height: 20px;
+                width: 24px;
+                height: 24px;
                 fill: #ffffff;
             }
 
@@ -66,13 +67,13 @@ class WhatsAppFloatingButton extends HTMLElement {
                 }
 
                 whatsapp-floating-button .whatsapp-fab {
-                    width: 36px;
-                    height: 36px;
+                    width: 44px;
+                    height: 44px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab svg {
-                    width: 18px;
-                    height: 18px;
+                    width: 22px;
+                    height: 22px;
                 }
             }
 
@@ -83,13 +84,13 @@ class WhatsAppFloatingButton extends HTMLElement {
                 }
 
                 whatsapp-floating-button .whatsapp-fab {
-                    width: 34px;
-                    height: 34px;
+                    width: 40px;
+                    height: 40px;
                 }
 
                 whatsapp-floating-button .whatsapp-fab svg {
-                    width: 16px;
-                    height: 16px;
+                    width: 20px;
+                    height: 20px;
                 }
             }
         `;
@@ -97,9 +98,14 @@ class WhatsAppFloatingButton extends HTMLElement {
         document.head.appendChild(style);
     }
 
+    getWhatsAppUrl() {
+        const encodedMessage = encodeURIComponent(this.defaultMessage);
+        return `https://wa.me/${this.phoneNumber}?text=${encodedMessage}`;
+    }
+
     render() {
         this.innerHTML = `
-            <a href="https://wa.me/${this.phoneNumber}"
+            <a href="${this.getWhatsAppUrl()}"
                target="_blank"
                rel="noopener noreferrer"
                class="whatsapp-fab"
