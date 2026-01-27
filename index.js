@@ -20,7 +20,8 @@ import './product-ranking-init.js';           // Sets up category/tag page ranki
 import './partials/youtube-url-transformer.js'; // YouTube URL to click-to-play
 import './partials/product-title-enhancer.js'; // Dynamic title sizing + truncation
 import './partials/product-card-enhancer.js'; // Multi-image slider for product cards
-import './partials/whatsapp-widget.js';      // WhatsApp floating button
+// DISABLED: WhatsApp floating button temporarily disabled
+// import './partials/whatsapp-widget.js';      // WhatsApp floating button
 
 // Expose globals expected by legacy theme code
 window.productRecommendations = productRecommendations;
@@ -351,9 +352,10 @@ onReady(() => {
   // }
 
   // 4. All pages: WhatsApp floating button
-  if (!document.querySelector('whatsapp-floating-button')) {
-    document.body.appendChild(document.createElement('whatsapp-floating-button'));
-  }
+  // DISABLED: WhatsApp floating button temporarily disabled
+  // if (!document.querySelector('whatsapp-floating-button')) {
+  //   document.body.appendChild(document.createElement('whatsapp-floating-button'));
+  // }
 
   console.log('✅ [Algolia Bundle] Loaded successfully');
 });

@@ -1047,7 +1047,7 @@
         productsPerPage: 30,
         categories: [],
         trendingCategory: {
-          name: "\u0631\u0627\u0626\u062C \u0627\u0644\u0627\u0646",
+          name: "\u062A\u0631\u0646\u062F \u0627\u0644\u0627\u0646",
           slug: "trending-now",
           filter: null,
           hasSubcats: false,
@@ -1087,28 +1087,30 @@
         832995956: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D8%B7%D8%B1%D8%B2%D8%A9/c832995956" },
         2031226480: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B1%D8%A3%D8%B3/c2031226480" },
         270965526: { name: "\u0634\u062A\u0627\u0621 2026", url: "https://darlena.com/%D8%B4%D8%AA%D8%A7%D8%A1-2026/c270965526" },
+        2072839792: { name: "\u0631\u0645\u0636\u0627\u0646 2026", url: "https://darlena.com/%D8%B1%D9%85%D8%B6%D8%A7%D9%86-2026/c2072839792" },
         692927841: { name: "\u0637\u0631\u062D", url: "https://darlena.com/%D8%B7%D8%B1%D8%AD/c692927841" },
         639447590: { name: "\u0646\u0642\u0627\u0628\u0627\u062A", url: "https://darlena.com/%D9%86%D9%82%D8%A7%D8%A8%D8%A7%D8%AA/c639447590" },
         114756598: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646", url: "https://darlena.com/%D8%B4%D9%8A%D9%81%D9%88%D9%86/c114756598" },
         273898307: { name: "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B4%D8%AA%D9%88%D9%8A%D8%A9/c273898307" }
       };
       const priorityOrder = {
-        "\u0631\u0627\u0626\u062C \u0627\u0644\u0627\u0646": 1,
-        "\u062C\u062F\u064A\u062F\u0646\u0627": 2,
-        "\u0634\u062A\u0627\u0621 2026": 3,
-        "\u062C\u0645\u064A\u0639 \u0627\u0644\u0639\u0628\u0627\u064A\u0627\u062A": 4,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629": 5,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0643\u0644\u0648\u0634": 6,
-        "\u062C\u0644\u0627\u0628\u064A\u0627\u062A": 7,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646": 8,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0633\u0648\u062F\u0627\u0621 \u0633\u0627\u062F\u0629": 9,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u062C\u064A\u0648\u0628": 10,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u0634\u062A": 11,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629": 12,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633": 13,
-        "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0644\u0648\u0646\u0629": 14,
-        "\u0637\u0631\u062D": 15,
-        "\u0646\u0642\u0627\u0628\u0627\u062A": 16
+        "\u062A\u0631\u0646\u062F \u0627\u0644\u0627\u0646": 1,
+        "\u0634\u062A\u0627\u0621 2026": 2,
+        "\u0631\u0645\u0636\u0627\u0646 2026": 3,
+        "\u062C\u062F\u064A\u062F\u0646\u0627": 4,
+        "\u062C\u0645\u064A\u0639 \u0627\u0644\u0639\u0628\u0627\u064A\u0627\u062A": 5,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u062A\u0648\u064A\u0629": 6,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0643\u0644\u0648\u0634": 7,
+        "\u062C\u0644\u0627\u0628\u064A\u0627\u062A": 8,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0634\u064A\u0641\u0648\u0646": 9,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0633\u0648\u062F\u0627\u0621 \u0633\u0627\u062F\u0629": 10,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u062C\u064A\u0648\u0628": 11,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0628\u0634\u062A": 12,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0637\u0631\u0632\u0629": 13,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0631\u0623\u0633": 14,
+        "\u0639\u0628\u0627\u064A\u0627\u062A \u0645\u0644\u0648\u0646\u0629": 15,
+        "\u0637\u0631\u062D": 16,
+        "\u0646\u0642\u0627\u0628\u0627\u062A": 17
       };
       try {
         const categories = await redisService.getCategoriesFromRedis();
@@ -2444,118 +2446,6 @@
   };
   new ProductCardEnhancer();
 
-  // partials/whatsapp-widget.js
-  var WhatsAppFloatingButton = class extends HTMLElement {
-    constructor() {
-      super();
-      this.phoneNumber = "966597818555";
-      this.defaultMessage = "\u0639\u0646\u062F\u064A \u0633\u0624\u0627\u0644 \u0639\u0646 \u0645\u0646\u062A\u062C \u0641\u064A \u0645\u0648\u0642\u0639 \u062F\u0627\u0631 \u0644\u064A\u0646\u0627 https://darlena.com";
-    }
-    connectedCallback() {
-      this.injectStyles();
-      this.render();
-    }
-    injectStyles() {
-      if (document.getElementById("whatsapp-widget-styles")) return;
-      const style = document.createElement("style");
-      style.id = "whatsapp-widget-styles";
-      style.textContent = `
-            whatsapp-floating-button {
-                display: block;
-                position: fixed;
-                bottom: 100px;
-                left: 16px;
-                z-index: 98;
-            }
-
-            whatsapp-floating-button .whatsapp-fab {
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                width: 48px;
-                height: 48px;
-                background: #25D366;
-                border-radius: 50%;
-                box-shadow: 0 2px 10px rgba(37, 211, 102, 0.4);
-                transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
-                text-decoration: none;
-            }
-
-            whatsapp-floating-button .whatsapp-fab:hover {
-                transform: scale(1.08);
-                background: #20bd5a;
-                box-shadow: 0 4px 14px rgba(37, 211, 102, 0.5);
-            }
-
-            whatsapp-floating-button .whatsapp-fab:active {
-                transform: scale(0.95);
-            }
-
-            whatsapp-floating-button .whatsapp-fab svg {
-                width: 24px;
-                height: 24px;
-                fill: #ffffff;
-            }
-
-            /* Mobile: Well above sticky product bar + footer + apple pay */
-            @media (max-width: 640px) {
-                whatsapp-floating-button {
-                    bottom: 200px;
-                    left: 12px;
-                }
-
-                whatsapp-floating-button .whatsapp-fab {
-                    width: 44px;
-                    height: 44px;
-                }
-
-                whatsapp-floating-button .whatsapp-fab svg {
-                    width: 22px;
-                    height: 22px;
-                }
-            }
-
-            /* Small mobile */
-            @media (max-width: 440px) {
-                whatsapp-floating-button {
-                    bottom: 180px;
-                }
-
-                whatsapp-floating-button .whatsapp-fab {
-                    width: 40px;
-                    height: 40px;
-                }
-
-                whatsapp-floating-button .whatsapp-fab svg {
-                    width: 20px;
-                    height: 20px;
-                }
-            }
-        `;
-      document.head.appendChild(style);
-    }
-    getWhatsAppUrl() {
-      const encodedMessage = encodeURIComponent(this.defaultMessage);
-      return `https://wa.me/${this.phoneNumber}?text=${encodedMessage}`;
-    }
-    render() {
-      this.innerHTML = `
-            <a href="${this.getWhatsAppUrl()}"
-               target="_blank"
-               rel="noopener noreferrer"
-               class="whatsapp-fab"
-               aria-label="\u062A\u0648\u0627\u0635\u0644 \u0645\u0639\u0646\u0627 \u0639\u0628\u0631 \u0648\u0627\u062A\u0633\u0627\u0628">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>
-                </svg>
-            </a>
-        `;
-    }
-  };
-  if (!customElements.get("whatsapp-floating-button")) {
-    customElements.define("whatsapp-floating-button", WhatsAppFloatingButton);
-  }
-
   // index.js
   window.productRecommendations = product_recommendations_default;
   window.redisService = redisService;
@@ -2611,9 +2501,6 @@
         product_recommendations_default.initialize();
         console.log("\u2705 [Algolia Bundle] Product recommendations initialized");
       }, 3e3);
-    }
-    if (!document.querySelector("whatsapp-floating-button")) {
-      document.body.appendChild(document.createElement("whatsapp-floating-button"));
     }
     console.log("\u2705 [Algolia Bundle] Loaded successfully");
   });
