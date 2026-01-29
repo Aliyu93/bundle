@@ -1674,6 +1674,47 @@
   var initialized = false;
   var initAttempts = 0;
   var MAX_ATTEMPTS = 2;
+  var isLocalizedCategoryPath = (() => {
+    const path = window.location.pathname || "";
+    if (!/^\/(ar|en)(\/|$)/.test(path)) return false;
+    return /\/c\d+(?:\/|$)/.test(path);
+  })();
+  var fallbackObserver = null;
+  function findRankingTarget() {
+    const categoryList = document.querySelector('salla-products-list[source="product.index"], salla-products-list[source="categories"]');
+    if (categoryList) {
+      const categoryId = categoryList.getAttribute("source-value");
+      if (categoryId) {
+        return { type: "category", id: categoryId };
+      }
+    }
+    const tagList = document.querySelector('salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]');
+    if (tagList) {
+      const tagId = tagList.getAttribute("source-value");
+      if (tagId) {
+        return { type: "tag", id: tagId };
+      }
+    }
+    return null;
+  }
+  function startFallbackObserver() {
+    if (!isLocalizedCategoryPath || fallbackObserver) return;
+    fallbackObserver = new MutationObserver(() => {
+      if (initialized) {
+        fallbackObserver.disconnect();
+        fallbackObserver = null;
+        return;
+      }
+      const target = findRankingTarget();
+      if (target) {
+        createRanking(target.type, target.id);
+        initialized = true;
+        fallbackObserver.disconnect();
+        fallbackObserver = null;
+      }
+    });
+    fallbackObserver.observe(document.body, { childList: true, subtree: true });
+  }
   function initRanking() {
     if (window.location.pathname.includes("/cart")) return;
     console.log(`[PR Init] Attempt ${initAttempts + 1}/${MAX_ATTEMPTS}`);
@@ -1683,26 +1724,13 @@
       console.warn("[PR Init] Max attempts reached");
       return;
     }
-    const categoryList = document.querySelector('salla-products-list[source="product.index"], salla-products-list[source="categories"]');
-    console.log("[PR Init] Category list found:", !!categoryList);
-    if (categoryList) {
-      const categoryId = categoryList.getAttribute("source-value");
-      if (categoryId) {
-        console.log("[PR Init] \u2705 Creating ranking for category:", categoryId);
-        createRanking("category", categoryId);
-        initialized = true;
-        return;
-      }
-    }
-    const tagList = document.querySelector('salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]');
-    if (tagList) {
-      const tagId = tagList.getAttribute("source-value");
-      if (tagId) {
-        console.log("[PR Init] \u2705 Creating ranking for tag:", tagId);
-        createRanking("tag", tagId);
-        initialized = true;
-        return;
-      }
+    const target = findRankingTarget();
+    console.log("[PR Init] Target found:", !!target);
+    if (target) {
+      console.log(`[PR Init] \u2705 Creating ranking for ${target.type}:`, target.id);
+      createRanking(target.type, target.id);
+      initialized = true;
+      return;
     }
     if (initAttempts < MAX_ATTEMPTS) {
       console.log("[PR Init] Retrying in 800ms...");
@@ -1720,16 +1748,27 @@
   document.addEventListener("salla::page::changed", () => {
     initialized = false;
     initAttempts = 0;
+    if (fallbackObserver) {
+      fallbackObserver.disconnect();
+      fallbackObserver = null;
+    }
     document.querySelectorAll("product-ranking").forEach((el) => el.remove());
     setTimeout(initRanking, 100);
   });
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", initRanking);
+    document.addEventListener("DOMContentLoaded", () => {
+      initRanking();
+      startFallbackObserver();
+    });
   } else {
     initRanking();
+    startFallbackObserver();
+  }
+  if (isLocalizedCategoryPath) {
     document.addEventListener("salla::ready", () => {
       if (!initialized) {
         setTimeout(initRanking, 100);
+        startFallbackObserver();
       }
     });
   }
