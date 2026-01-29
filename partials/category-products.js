@@ -255,72 +255,81 @@ class CategoryProductsComponent extends HTMLElement {
 
     async initializeCategorySections() {
         try {
-            
-            const categoryPromises = this.state.categories.map(category => {
-                if (category.slug === 'trending-now') {
-                    return redisService.getGlobalProducts(0, this.state.productsPerPage)
-                               .then(result => ({ slug: category.slug, ids: result.objectIDs || [] }))
-                               .catch(error => ({ slug: category.slug, ids: [], error })); 
-                } else if (category.ids && category.ids.length > 0) {
-                    return this.fetchRegularCategory(category)
-                               .then(ids => ({ slug: category.slug, ids: ids || [] }))
-                               .catch(error => ({ slug: category.slug, ids: [], error })); 
-                } else {
-                    
-                    return Promise.resolve({ slug: category.slug, ids: [] });
-                }
-            });
-
-            const results = await Promise.all(categoryPromises);
-
-            
-            const fetchedIDsMap = results.reduce((acc, result) => {
-                
-                
-                acc[result.slug] = result.ids;
-                return acc;
-            }, {});
-
-            
-            this.seenProductIds.clear(); 
+            this.seenProductIds.clear();
             const uniqueIDsPerCategory = {};
 
             for (const category of this.state.categories) {
-                const fetchedIDs = fetchedIDsMap[category.slug] || [];
                 const uniqueIDs = [];
-                for (const pid of fetchedIDs) {
-                    if (!this.seenProductIds.has(pid)) {
-                        this.seenProductIds.add(pid);
-                        uniqueIDs.push(pid);
-                        if (uniqueIDs.length >= 6) break; 
+                let offset = 0;
+                let hasMore = true;
+
+                while (uniqueIDs.length < 6 && hasMore) {
+                    const page = await this.fetchCategoryPage(category, offset, this.state.productsPerPage);
+                    const fetchedIDs = page.objectIDs || [];
+
+                    if (!fetchedIDs.length) {
+                        break;
                     }
+
+                    for (const pid of fetchedIDs) {
+                        if (!this.seenProductIds.has(pid)) {
+                            this.seenProductIds.add(pid);
+                            uniqueIDs.push(pid);
+                            if (uniqueIDs.length >= 6) break;
+                        }
+                    }
+
+                    if (uniqueIDs.length >= 6) break;
+
+                    hasMore = page.hasMore === true;
+                    if (!hasMore) break;
+
+                    offset += this.state.productsPerPage;
                 }
+
                 uniqueIDsPerCategory[category.slug] = uniqueIDs;
             }
 
-            
             this.renderProductSliders(uniqueIDsPerCategory);
-
         } catch (error) {
-            
-            this.handleInitError(error); 
+            this.handleInitError(error);
         }
     }
 
-    async fetchRegularCategory(catObj) {
-        const categoryIdFetches = catObj.ids.map(numericID =>
-            redisService.getCategoryPageById(numericID, 0, this.state.productsPerPage)
-                .catch(error => {
-                    return { objectIDs: [] };
-                })
-        );
-
-        try {
-            const results = await Promise.all(categoryIdFetches);
-            return results.flatMap(data => (data && data.objectIDs) ? data.objectIDs : []);
-        } catch (error) {
-            return [];
+    async fetchCategoryPage(catObj, offset, limit) {
+        if (catObj.slug === 'trending-now') {
+            try {
+                const result = await redisService.getGlobalProducts(offset, limit);
+                const objectIDs = result?.objectIDs || [];
+                const hasMore = typeof result?.hasMore === 'boolean'
+                    ? result.hasMore
+                    : objectIDs.length === limit;
+                return { objectIDs, hasMore };
+            } catch (error) {
+                return { objectIDs: [], hasMore: false };
+            }
         }
+
+        if (catObj.ids && catObj.ids.length > 0) {
+            const categoryIdFetches = catObj.ids.map(numericID =>
+                redisService.getCategoryPageById(numericID, offset, limit)
+                    .catch(() => ({ objectIDs: [], hasMore: false }))
+            );
+
+            try {
+                const results = await Promise.all(categoryIdFetches);
+                const objectIDs = results.flatMap(data => (data && data.objectIDs) ? data.objectIDs : []);
+                const hasMore = results.some(data => {
+                    if (typeof data?.hasMore === 'boolean') return data.hasMore;
+                    return Array.isArray(data?.objectIDs) && data.objectIDs.length === limit;
+                });
+                return { objectIDs, hasMore };
+            } catch (error) {
+                return { objectIDs: [], hasMore: false };
+            }
+        }
+
+        return { objectIDs: [], hasMore: false };
     }
 
     renderProductSliders(uniqueIDsPerCategory) {
