@@ -163,8 +163,10 @@ class RedisService {
             
             const data = await response.json();
             const categories = data.categories || [];
-            
-            this.cache.set(cacheKey, categories);
+
+            if (Array.isArray(categories) && categories.length > 0) {
+                this.cache.set(cacheKey, categories);
+            }
             return categories;
         } catch (error) {
             return [];
