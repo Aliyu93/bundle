@@ -23,6 +23,7 @@ class RedisService {
         const url = `${this.baseUrl}/?type=${endpoint}&${param}=${encodeURIComponent(id)}&offset=${offset}&limit=${limit}`;
         
         let data = null;
+        let shouldDelayedRetry = false;
         
         try {
             const controller = new AbortController();
@@ -45,11 +46,18 @@ class RedisService {
                 this.cache.set(cacheKey, data);
                 return data;
             }
+            const total = Number(data?.totalObjectIDs ?? data?.count ?? 0);
+            if (offset === 0 && Array.isArray(data?.objectIDs) && data.objectIDs.length === 0 && total > 0) {
+                shouldDelayedRetry = true;
+            }
         } catch (error) {
         }
         
         if (!data?.objectIDs?.length && this.fallbackEnabled) {
             try {
+                if (shouldDelayedRetry) {
+                    await new Promise(resolve => setTimeout(resolve, 750));
+                }
                 const response = await fetch(url, { 
                     method: 'GET', 
                     headers: this.headers,
