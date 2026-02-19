@@ -58,6 +58,7 @@ class GomlaModalRerank {
         this.processTimer = setTimeout(async () => {
             try {
                 await this.processAllGomlaGrids();
+                await this.processAllInlineTracks();
             } finally {
                 this.pending = false;
                 if (this.needsReprocess) {
@@ -75,6 +76,23 @@ class GomlaModalRerank {
         for (const grid of grids) {
             await this.processGrid(grid);
         }
+    }
+
+    async processAllInlineTracks() {
+        const tracks = document.querySelectorAll('.gomla__addon-bundle-container .gomla__carousel-track');
+        if (!tracks.length) return;
+
+        const currentProductId = this.getCurrentProductId();
+        if (!currentProductId) return;
+
+        const frequentlyBoughtIds = this.normalizeAndUniqueIds(
+            await redisService.getFrequentlyBought(currentProductId)
+        );
+        if (!frequentlyBoughtIds.length) return;
+
+        tracks.forEach((track) => {
+            this.processInlineTrack(track, currentProductId, frequentlyBoughtIds);
+        });
     }
 
     async processGrid(grid) {
@@ -230,6 +248,84 @@ class GomlaModalRerank {
         return Number.isFinite(price) ? price : NaN;
     }
 
+    processInlineTrack(track, currentProductId, orderedIds) {
+        if (!track) return;
+
+        const preSignature = this.buildInlineTrackSignature(track, currentProductId, orderedIds);
+        if (track.dataset.gomlaInlineRerankSignature === preSignature) return;
+
+        this.filterInlineItemsByMinimumPrice(track, MIN_PRICE_SAR);
+        this.reorderInlineItemsMatchedThenUnmatched(track, orderedIds);
+
+        track.dataset.gomlaInlineRerankSignature = this.buildInlineTrackSignature(track, currentProductId, orderedIds);
+    }
+
+    buildInlineTrackSignature(track, currentProductId, orderedIds) {
+        const itemIds = Array.from(track.querySelectorAll('.gomla__carousel-item .gomla__product-card[data-product-id]'))
+            .map((card) => this.normalizeProductId(card.dataset.productId))
+            .filter(Boolean);
+        return `${currentProductId}|${orderedIds.join(',')}|${itemIds.join(',')}`;
+    }
+
+    filterInlineItemsByMinimumPrice(track, minPrice) {
+        const items = Array.from(track.querySelectorAll('.gomla__carousel-item'));
+        items.forEach((item) => {
+            const price = this.extractInlineItemPrice(item);
+            if (!Number.isFinite(price)) return;
+            if (price < minPrice) {
+                item.remove();
+            }
+        });
+    }
+
+    extractInlineItemPrice(item) {
+        const priceNode = item.querySelector('.gomla__product-card__price');
+        if (!priceNode) return NaN;
+
+        const normalizedText = this.toEnglishDigits(priceNode.textContent || '');
+        const numericText = normalizedText.replace(/[^\d.,]/g, '').replace(/,/g, '');
+        if (!numericText) return NaN;
+
+        const price = parseFloat(numericText);
+        return Number.isFinite(price) ? price : NaN;
+    }
+
+    reorderInlineItemsMatchedThenUnmatched(track, orderedIds) {
+        const items = Array.from(track.querySelectorAll('.gomla__carousel-item'));
+        if (!items.length) return;
+
+        const itemsByProductId = new Map();
+        items.forEach((item) => {
+            const card = item.querySelector('.gomla__product-card[data-product-id]');
+            const productId = this.normalizeProductId(
+                card?.dataset?.productId || item.getAttribute('data-item-id')
+            );
+            if (!productId) return;
+
+            if (!itemsByProductId.has(productId)) {
+                itemsByProductId.set(productId, []);
+            }
+            itemsByProductId.get(productId).push(item);
+        });
+
+        const matched = [];
+        orderedIds.forEach((rawId) => {
+            const productId = this.normalizeProductId(rawId);
+            if (!productId) return;
+
+            const queue = itemsByProductId.get(productId);
+            if (!queue || queue.length === 0) return;
+            matched.push(queue.shift());
+        });
+
+        const matchedSet = new Set(matched);
+        const unmatched = items.filter((item) => !matchedSet.has(item));
+        const finalOrder = matched.concat(unmatched);
+        finalOrder.forEach((item) => {
+            track.appendChild(item);
+        });
+    }
+
     handleDocumentCartAdded(event) {
         const detailId = this.extractProductIdFromPayload(event?.detail);
         if (detailId) {
@@ -263,6 +359,31 @@ class GomlaModalRerank {
     handlePageChanged() {
         this.lastAddedProductId = null;
         this.scheduleProcess();
+    }
+
+    getCurrentProductId() {
+        const fromInput = this.normalizeProductId(
+            document.querySelector('.product-form input[name="id"]')?.value
+        );
+        if (fromInput) return fromInput;
+
+        const fromSalla = this.normalizeProductId(window.salla?.product?.id);
+        if (fromSalla) return fromSalla;
+
+        const fromProductElement = this.normalizeProductId(
+            document.querySelector('.product-entry[id^="product-"], #product-entry[id^="product-"], [id^="product-"]')
+                ?.id
+                ?.replace('product-', '')
+        );
+        if (fromProductElement) return fromProductElement;
+
+        const urlMatch = window.location.pathname.match(/\/p(\d+)(?:$|\/|\?)/);
+        if (urlMatch?.[1]) {
+            const fromUrl = this.normalizeProductId(urlMatch[1]);
+            if (fromUrl) return fromUrl;
+        }
+
+        return null;
     }
 
     extractProductIdFromPayload(payload) {
