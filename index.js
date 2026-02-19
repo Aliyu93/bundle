@@ -346,10 +346,9 @@ onReady(() => {
   }
 
   // 3. Cart page: Ensure cart addons slider exists
-  // DISABLED: Causing mobile checkout issues - redirecting to product pages
-  // if (document.querySelector('form[id^="item-"]') || document.querySelector('#cart-submit')) {
-  //   setTimeout(runCartAddonsInjection, 500);
-  // }
+  if (document.querySelector('form[id^="item-"]') || document.querySelector('#cart-submit')) {
+    setTimeout(runCartAddonsInjection, 500);
+  }
 
   // 4. All pages: WhatsApp floating button
   // DISABLED: WhatsApp floating button temporarily disabled
@@ -366,8 +365,7 @@ document.addEventListener('salla::page::changed', () => {
     productRecommendations.initialize();
   }, 1000);
 
-  // DISABLED: Causing mobile checkout issues
-  // setTimeout(runCartAddonsInjection, 500);
+  setTimeout(runCartAddonsInjection, 500);
 });
 
 // Fallback: Also listen for theme::ready (fires on every page load)
