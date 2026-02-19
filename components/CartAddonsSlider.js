@@ -132,8 +132,8 @@ class CartAddonsSlider extends HTMLElement {
 
         const language = (document.documentElement.getAttribute('lang') || '').toLowerCase().slice(0, 2);
         const fallbackTitles = {
-            ar: '\u0645\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643',
-            en: 'Frequently Bought Together'
+            ar: 'أضيفي منتج واحصلي على خصم 15%',
+            en: 'Add a product & get 15% off'
         };
 
         return fallbackTitles[language] || fallbackTitles.en;
@@ -273,6 +273,40 @@ class CartAddonsSlider extends HTMLElement {
         console.log('[CartAddonsSlider] Product list rendered');
     }
 
+    applyDiscount() {
+        const DISCOUNT = 0.85;
+        const apply = () => {
+            const prices = this.querySelectorAll('.s-product-card-sale-price h4');
+            if (prices.length === 0) return false;
+
+            prices.forEach(el => {
+                if (el.dataset.discounted) return;
+                const text = el.textContent || '';
+                const cleaned = text
+                    .replace(/[^\d.,٠١٢٣٤٥٦٧٨٩]/g, '')
+                    .replace(/٠/g, '0').replace(/١/g, '1').replace(/٢/g, '2')
+                    .replace(/٣/g, '3').replace(/٤/g, '4').replace(/٥/g, '5')
+                    .replace(/٦/g, '6').replace(/٧/g, '7').replace(/٨/g, '8')
+                    .replace(/٩/g, '9');
+                const num = parseFloat(cleaned.replace(',', '.'));
+                if (!isNaN(num)) {
+                    const discounted = (num * DISCOUNT).toFixed(2);
+                    el.textContent = text.replace(/[\d.,٠١٢٣٤٥٦٧٨٩]+/, discounted);
+                    el.dataset.discounted = 'true';
+                }
+            });
+            return true;
+        };
+
+        if (apply()) return;
+
+        const observer = new MutationObserver(() => {
+            if (apply()) observer.disconnect();
+        });
+        observer.observe(this, { childList: true, subtree: true });
+        setTimeout(() => observer.disconnect(), 10000);
+    }
+
     initializeSlider() {
         try {
             const productsList = this.querySelector('salla-products-list');
@@ -282,11 +316,12 @@ class CartAddonsSlider extends HTMLElement {
             }
 
             productsList.style.opacity = '1';
-            
+
             if (window.salla?.event?.dispatch) {
                 window.salla.event.dispatch('twilight::mutation');
             }
-            
+
+            this.applyDiscount();
             this.initialized = true;
             console.log('[CartAddonsSlider] Slider initialized');
         } catch (error) {
