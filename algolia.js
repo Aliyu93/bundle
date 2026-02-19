@@ -2386,6 +2386,8 @@
     }
     enhance(card, productId, imageWrapper, imageLink) {
       const sliderId = `s${productId}-${Math.random().toString(36).substr(2, 4)}`;
+      imageWrapper.classList.add("swiper-no-swiping");
+      imageLink.classList.add("swiper-no-swiping");
       const swipeIndicator = document.createElement("div");
       swipeIndicator.className = "swipe-indicator";
       imageLink.appendChild(swipeIndicator);

@@ -20,6 +20,7 @@ import './product-ranking-init.js';           // Sets up category/tag page ranki
 import './partials/youtube-url-transformer.js'; // YouTube URL to click-to-play
 import './partials/product-title-enhancer.js'; // Dynamic title sizing + truncation
 import './partials/product-card-enhancer.js'; // Multi-image slider for product cards
+import './partials/gomla-modal-rerank.js'; // Re-rank Gomla modal products using frequently bought data
 // DISABLED: WhatsApp floating button temporarily disabled
 // import './partials/whatsapp-widget.js';      // WhatsApp floating button
 

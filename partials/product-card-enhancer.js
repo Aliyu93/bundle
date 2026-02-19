@@ -271,6 +271,9 @@ class ProductCardEnhancer {
     // Create unique slider ID
     const sliderId = `s${productId}-${Math.random().toString(36).substr(2, 4)}`;
 
+    imageWrapper.classList.add('swiper-no-swiping');
+    imageLink.classList.add('swiper-no-swiping');
+
     // Add swipe indicator
     const swipeIndicator = document.createElement('div');
     swipeIndicator.className = 'swipe-indicator';
