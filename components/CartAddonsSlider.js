@@ -276,26 +276,44 @@ class CartAddonsSlider extends HTMLElement {
     applyDiscount() {
         const DISCOUNT = 0.85;
         const apply = () => {
-            const prices = this.querySelectorAll('.s-product-card-sale-price h4');
-            if (prices.length === 0) return false;
+            const cards = this.querySelectorAll('.s-product-card-entry');
+            if (cards.length === 0) return false;
 
-            prices.forEach(el => {
-                if (el.dataset.discounted) return;
-                const text = el.textContent || '';
+            let applied = 0;
+            cards.forEach(card => {
+                if (card.dataset.discounted) { applied++; return; }
+                const priceEl = card.querySelector('.s-product-card-sale-price h4')
+                    || card.querySelector('.s-product-card-content-sub h4');
+                if (!priceEl) return;
+
+                const text = priceEl.textContent || '';
                 const cleaned = text
                     .replace(/[^\d.,٠١٢٣٤٥٦٧٨٩]/g, '')
                     .replace(/٠/g, '0').replace(/١/g, '1').replace(/٢/g, '2')
                     .replace(/٣/g, '3').replace(/٤/g, '4').replace(/٥/g, '5')
                     .replace(/٦/g, '6').replace(/٧/g, '7').replace(/٨/g, '8')
-                    .replace(/٩/g, '9');
-                const num = parseFloat(cleaned.replace(',', '.'));
-                if (!isNaN(num)) {
-                    const discounted = (num * DISCOUNT).toFixed(2);
-                    el.textContent = text.replace(/[\d.,٠١٢٣٤٥٦٧٨٩]+/, discounted);
-                    el.dataset.discounted = 'true';
-                }
+                    .replace(/٩/g, '9')
+                    .replace(/,/g, '');
+                const num = parseFloat(cleaned);
+                if (isNaN(num)) return;
+
+                const discounted = (num * DISCOUNT).toFixed(2);
+                const currency = priceEl.querySelector('i')?.outerHTML || '';
+
+                // Salla pattern: original price with line-through
+                priceEl.style.textDecoration = 'line-through';
+                priceEl.style.color = '#6b7280';
+
+                // Salla pattern: discounted price in red
+                const newPrice = document.createElement('h4');
+                newPrice.style.color = '#991b1b';
+                newPrice.innerHTML = `${discounted} ${currency}`;
+                priceEl.after(newPrice);
+
+                card.dataset.discounted = 'true';
+                applied++;
             });
-            return true;
+            return applied > 0;
         };
 
         if (apply()) return;
