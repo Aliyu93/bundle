@@ -21,6 +21,7 @@
       const endpoint = type === "category" ? "categoryById" : "tagById";
       const url = `${this.baseUrl}/?type=${endpoint}&${param}=${encodeURIComponent(id)}&offset=${offset}&limit=${limit}`;
       let data = null;
+      let shouldDelayedRetry = false;
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2e3);
@@ -38,10 +39,17 @@
           this.cache.set(cacheKey, data);
           return data;
         }
+        const total = Number(data?.totalObjectIDs ?? data?.count ?? 0);
+        if (offset === 0 && Array.isArray(data?.objectIDs) && data.objectIDs.length === 0 && total > 0) {
+          shouldDelayedRetry = true;
+        }
       } catch (error) {
       }
       if (!data?.objectIDs?.length && this.fallbackEnabled) {
         try {
+          if (shouldDelayedRetry) {
+            await new Promise((resolve) => setTimeout(resolve, 750));
+          }
           const response = await fetch(url, {
             method: "GET",
             headers: this.headers
@@ -127,7 +135,9 @@
         }
         const data = await response.json();
         const categories = data.categories || [];
-        this.cache.set(cacheKey, categories);
+        if (Array.isArray(categories) && categories.length > 0) {
+          this.cache.set(cacheKey, categories);
+        }
         return categories;
       } catch (error) {
         return [];
@@ -268,8 +278,8 @@
       }
       const language = (document.documentElement.getAttribute("lang") || "").toLowerCase().slice(0, 2);
       const fallbackTitles = {
-        ar: "\u0645\u062A\u062C\u0627\u062A \u0642\u062F \u062A\u0639\u062C\u0628\u0643",
-        en: "Frequently Bought Together"
+        ar: "\u0623\u0636\u064A\u0641\u064A \u0645\u0646\u062A\u062C \u0648\u0627\u062D\u0635\u0644\u064A \u0639\u0644\u0649 \u062E\u0635\u0645 15%",
+        en: "Add a product & get 15% off"
       };
       return fallbackTitles[language] || fallbackTitles.en;
     }
@@ -372,6 +382,43 @@
       }
       console.log("[CartAddonsSlider] Product list rendered");
     }
+    applyDiscount() {
+      const DISCOUNT = 0.85;
+      const apply = () => {
+        const cards = this.querySelectorAll(".s-product-card-entry");
+        if (cards.length === 0) return false;
+        let applied = 0;
+        cards.forEach((card) => {
+          if (card.dataset.discounted) {
+            applied++;
+            return;
+          }
+          const priceEl = card.querySelector(".s-product-card-sale-price h4") || card.querySelector(".s-product-card-content-sub h4");
+          if (!priceEl) return;
+          const text = priceEl.textContent || "";
+          const cleaned = text.replace(/[^\d.,٠١٢٣٤٥٦٧٨٩]/g, "").replace(/٠/g, "0").replace(/١/g, "1").replace(/٢/g, "2").replace(/٣/g, "3").replace(/٤/g, "4").replace(/٥/g, "5").replace(/٦/g, "6").replace(/٧/g, "7").replace(/٨/g, "8").replace(/٩/g, "9").replace(/,/g, "");
+          const num = parseFloat(cleaned);
+          if (isNaN(num)) return;
+          const discounted = (num * DISCOUNT).toFixed(2);
+          const currency = priceEl.querySelector("i")?.outerHTML || "";
+          priceEl.style.textDecoration = "line-through";
+          priceEl.style.color = "#6b7280";
+          const newPrice = document.createElement("h4");
+          newPrice.style.color = "#991b1b";
+          newPrice.innerHTML = `${discounted} ${currency}`;
+          priceEl.after(newPrice);
+          card.dataset.discounted = "true";
+          applied++;
+        });
+        return applied > 0;
+      };
+      if (apply()) return;
+      const observer = new MutationObserver(() => {
+        if (apply()) observer.disconnect();
+      });
+      observer.observe(this, { childList: true, subtree: true });
+      setTimeout(() => observer.disconnect(), 1e4);
+    }
     initializeSlider() {
       try {
         const productsList = this.querySelector("salla-products-list");
@@ -383,6 +430,7 @@
         if (window.salla?.event?.dispatch) {
           window.salla.event.dispatch("twilight::mutation");
         }
+        this.applyDiscount();
         this.initialized = true;
         console.log("[CartAddonsSlider] Slider initialized");
       } catch (error) {
@@ -1674,47 +1722,6 @@
   var initialized = false;
   var initAttempts = 0;
   var MAX_ATTEMPTS = 2;
-  var isLocalizedCategoryPath = (() => {
-    const path = window.location.pathname || "";
-    if (!/^\/(ar|en)(\/|$)/.test(path)) return false;
-    return /\/c\d+(?:\/|$)/.test(path);
-  })();
-  var fallbackObserver = null;
-  function findRankingTarget() {
-    const categoryList = document.querySelector('salla-products-list[source="product.index"], salla-products-list[source="categories"]');
-    if (categoryList) {
-      const categoryId = categoryList.getAttribute("source-value");
-      if (categoryId) {
-        return { type: "category", id: categoryId };
-      }
-    }
-    const tagList = document.querySelector('salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]');
-    if (tagList) {
-      const tagId = tagList.getAttribute("source-value");
-      if (tagId) {
-        return { type: "tag", id: tagId };
-      }
-    }
-    return null;
-  }
-  function startFallbackObserver() {
-    if (!isLocalizedCategoryPath || fallbackObserver) return;
-    fallbackObserver = new MutationObserver(() => {
-      if (initialized) {
-        fallbackObserver.disconnect();
-        fallbackObserver = null;
-        return;
-      }
-      const target = findRankingTarget();
-      if (target) {
-        createRanking(target.type, target.id);
-        initialized = true;
-        fallbackObserver.disconnect();
-        fallbackObserver = null;
-      }
-    });
-    fallbackObserver.observe(document.body, { childList: true, subtree: true });
-  }
   function initRanking() {
     if (window.location.pathname.includes("/cart")) return;
     console.log(`[PR Init] Attempt ${initAttempts + 1}/${MAX_ATTEMPTS}`);
@@ -1724,13 +1731,26 @@
       console.warn("[PR Init] Max attempts reached");
       return;
     }
-    const target = findRankingTarget();
-    console.log("[PR Init] Target found:", !!target);
-    if (target) {
-      console.log(`[PR Init] \u2705 Creating ranking for ${target.type}:`, target.id);
-      createRanking(target.type, target.id);
-      initialized = true;
-      return;
+    const categoryList = document.querySelector('salla-products-list[source="product.index"], salla-products-list[source="categories"]');
+    console.log("[PR Init] Category list found:", !!categoryList);
+    if (categoryList) {
+      const categoryId = categoryList.getAttribute("source-value");
+      if (categoryId) {
+        console.log("[PR Init] \u2705 Creating ranking for category:", categoryId);
+        createRanking("category", categoryId);
+        initialized = true;
+        return;
+      }
+    }
+    const tagList = document.querySelector('salla-products-list[source="product.index.tag"], salla-products-list[source^="tags."]');
+    if (tagList) {
+      const tagId = tagList.getAttribute("source-value");
+      if (tagId) {
+        console.log("[PR Init] \u2705 Creating ranking for tag:", tagId);
+        createRanking("tag", tagId);
+        initialized = true;
+        return;
+      }
     }
     if (initAttempts < MAX_ATTEMPTS) {
       console.log("[PR Init] Retrying in 800ms...");
@@ -1748,27 +1768,16 @@
   document.addEventListener("salla::page::changed", () => {
     initialized = false;
     initAttempts = 0;
-    if (fallbackObserver) {
-      fallbackObserver.disconnect();
-      fallbackObserver = null;
-    }
     document.querySelectorAll("product-ranking").forEach((el) => el.remove());
     setTimeout(initRanking, 100);
   });
   if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => {
-      initRanking();
-      startFallbackObserver();
-    });
+    document.addEventListener("DOMContentLoaded", initRanking);
   } else {
     initRanking();
-    startFallbackObserver();
-  }
-  if (isLocalizedCategoryPath) {
     document.addEventListener("salla::ready", () => {
       if (!initialized) {
         setTimeout(initRanking, 100);
-        startFallbackObserver();
       }
     });
   }
@@ -2589,6 +2598,299 @@
   };
   new ProductCardEnhancer();
 
+  // partials/gomla-modal-rerank.js
+  var MIN_PRICE_SAR = 150;
+  var GomlaModalRerank = class {
+    constructor() {
+      this.lastAddedProductId = null;
+      this.mutationObserver = null;
+      this.sallaCartHooked = false;
+      this.processTimer = null;
+      this.pending = false;
+      this.needsReprocess = false;
+      this.gridOriginalHtml = /* @__PURE__ */ new WeakMap();
+      this.gridAppliedKey = /* @__PURE__ */ new WeakMap();
+      this.onDocumentCartAdded = this.handleDocumentCartAdded.bind(this);
+      this.onPageChanged = this.handlePageChanged.bind(this);
+      this.onSallaReady = this.tryHookSallaCartEvent.bind(this);
+      this.initialize();
+    }
+    initialize() {
+      document.addEventListener("salla::cart::item.added", this.onDocumentCartAdded);
+      document.addEventListener("salla::ready", this.onSallaReady);
+      document.addEventListener("theme::ready", this.onSallaReady);
+      document.addEventListener("salla::page::changed", this.onPageChanged);
+      this.tryHookSallaCartEvent();
+      this.observeModalMutations();
+      this.scheduleProcess();
+    }
+    observeModalMutations() {
+      if (this.mutationObserver) return;
+      if (!document.body) {
+        document.addEventListener("DOMContentLoaded", () => this.observeModalMutations(), { once: true });
+        return;
+      }
+      this.mutationObserver = new MutationObserver(() => {
+        this.scheduleProcess();
+      });
+      this.mutationObserver.observe(document.body, {
+        childList: true,
+        subtree: true
+      });
+    }
+    scheduleProcess() {
+      if (this.pending) {
+        this.needsReprocess = true;
+        return;
+      }
+      this.pending = true;
+      this.needsReprocess = false;
+      clearTimeout(this.processTimer);
+      this.processTimer = setTimeout(async () => {
+        try {
+          await this.processAllGomlaGrids();
+        } finally {
+          this.pending = false;
+          if (this.needsReprocess) {
+            this.needsReprocess = false;
+            this.scheduleProcess();
+          }
+        }
+      }, 120);
+    }
+    async processAllGomlaGrids() {
+      const grids = document.querySelectorAll(".gomla-modal .gomla__popup-grid[data-gomla-addon-bundle-id]");
+      if (!grids.length) return;
+      for (const grid of grids) {
+        await this.processGrid(grid);
+      }
+    }
+    async processGrid(grid) {
+      if (!grid) return;
+      this.captureOriginalGrid(grid);
+      if (!this.gridOriginalHtml.has(grid)) return;
+      if (!this.lastAddedProductId) {
+        this.restoreOriginalGrid(grid);
+        return;
+      }
+      const frequentlyBoughtIds = this.normalizeAndUniqueIds(
+        await redisService.getFrequentlyBought(this.lastAddedProductId)
+      );
+      if (!frequentlyBoughtIds.length) {
+        this.restoreOriginalGrid(grid);
+        return;
+      }
+      const renderKey = `${this.lastAddedProductId}|${frequentlyBoughtIds.join(",")}`;
+      if (this.gridAppliedKey.get(grid) === renderKey && this.hasSelectedList(grid)) return;
+      this.renderSelectedProducts(grid, frequentlyBoughtIds);
+      this.gridAppliedKey.set(grid, renderKey);
+      this.applyOrderAndMinimumPrice(grid, frequentlyBoughtIds, MIN_PRICE_SAR);
+    }
+    captureOriginalGrid(grid) {
+      if (this.gridOriginalHtml.has(grid)) return;
+      const hasOriginalCards = grid.querySelector(".gomla__popup-item .gomla__product-card[data-product-id]");
+      if (!hasOriginalCards) return;
+      this.gridOriginalHtml.set(grid, grid.innerHTML);
+    }
+    restoreOriginalGrid(grid) {
+      const originalHtml = this.gridOriginalHtml.get(grid);
+      if (typeof originalHtml !== "string") return;
+      if (grid.innerHTML !== originalHtml) {
+        grid.innerHTML = originalHtml;
+        window.salla?.event?.dispatch?.("twilight::mutation");
+      }
+      this.gridAppliedKey.delete(grid);
+    }
+    renderSelectedProducts(grid, orderedIds) {
+      const list = document.createElement("salla-products-list");
+      list.setAttribute("source", "selected");
+      list.setAttribute("source-value", JSON.stringify(orderedIds));
+      list.setAttribute("limit", String(orderedIds.length));
+      list.setAttribute("loading", "lazy");
+      list.className = "s-products-list-vertical-cards";
+      grid.innerHTML = "";
+      grid.appendChild(list);
+      window.salla?.event?.dispatch?.("twilight::mutation");
+    }
+    hasSelectedList(grid) {
+      return !!grid.querySelector('salla-products-list[source="selected"]');
+    }
+    applyOrderAndMinimumPrice(grid, orderedIds, minPrice, maxAttempts = 40) {
+      let attempt = 0;
+      const intervalId = setInterval(() => {
+        attempt += 1;
+        const cards = this.getRenderedCards(grid);
+        if (cards.length > 0) {
+          clearInterval(intervalId);
+          this.reorderRenderedCards(cards, orderedIds);
+          this.filterRenderedCardsByMinimumPrice(grid, minPrice);
+          return;
+        }
+        if (attempt >= maxAttempts) {
+          clearInterval(intervalId);
+        }
+      }, 100);
+    }
+    getRenderedCards(grid) {
+      const entryCards = Array.from(grid.querySelectorAll(".s-product-card-entry"));
+      if (entryCards.length > 0) return entryCards;
+      return Array.from(grid.querySelectorAll("custom-salla-product-card"));
+    }
+    reorderRenderedCards(cards, orderedIds) {
+      if (!cards.length) return;
+      const parent = cards[0].parentNode;
+      if (!parent) return;
+      const cardMap = /* @__PURE__ */ new Map();
+      cards.forEach((card) => {
+        const productId = this.extractRenderedCardProductId(card);
+        if (!productId) return;
+        if (!cardMap.has(productId)) {
+          cardMap.set(productId, []);
+        }
+        cardMap.get(productId).push(card);
+      });
+      orderedIds.forEach((rawId) => {
+        const productId = this.normalizeProductId(rawId);
+        if (!productId) return;
+        const queue = cardMap.get(productId);
+        if (!queue || queue.length === 0) return;
+        parent.appendChild(queue.shift());
+      });
+    }
+    extractRenderedCardProductId(card) {
+      if (!card) return null;
+      const fromDataId = this.normalizeProductId(card.dataset?.id);
+      if (fromDataId) return fromDataId;
+      const fromIdAttr = this.normalizeProductId(card.id);
+      if (fromIdAttr) return fromIdAttr;
+      const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a, a[href*="/product/"]');
+      if (link?.href) {
+        const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
+        if (match?.[1]) return this.normalizeProductId(match[1]);
+      }
+      return null;
+    }
+    filterRenderedCardsByMinimumPrice(grid, minPrice) {
+      const cards = this.getRenderedCards(grid);
+      cards.forEach((card) => {
+        const price = this.extractRenderedCardPrice(card);
+        if (!Number.isFinite(price)) return;
+        if (price < minPrice) {
+          card.remove();
+        }
+      });
+    }
+    extractRenderedCardPrice(card) {
+      const priceNode = card.querySelector(".s-product-card-sale-price h4") || card.querySelector(".s-product-card-content-sub h4");
+      if (!priceNode) return NaN;
+      const normalizedText = this.toEnglishDigits(priceNode.textContent || "");
+      const numericText = normalizedText.replace(/[^\d.,]/g, "").replace(/,/g, "");
+      if (!numericText) return NaN;
+      const price = parseFloat(numericText);
+      return Number.isFinite(price) ? price : NaN;
+    }
+    handleDocumentCartAdded(event) {
+      const detailId = this.extractProductIdFromPayload(event?.detail);
+      if (detailId) {
+        this.setLastAddedProductId(detailId);
+      }
+    }
+    tryHookSallaCartEvent() {
+      if (this.sallaCartHooked) return;
+      const onItemAdded = window.salla?.cart?.event?.onItemAdded;
+      if (typeof onItemAdded !== "function") return;
+      onItemAdded((payload) => {
+        const payloadProductId = this.extractProductIdFromPayload(payload);
+        if (payloadProductId) {
+          this.setLastAddedProductId(payloadProductId);
+        }
+      });
+      this.sallaCartHooked = true;
+    }
+    setLastAddedProductId(productId) {
+      const normalized = this.normalizeProductId(productId);
+      if (!normalized) return;
+      this.lastAddedProductId = normalized;
+      this.scheduleProcess();
+    }
+    handlePageChanged() {
+      this.lastAddedProductId = null;
+      this.scheduleProcess();
+    }
+    extractProductIdFromPayload(payload) {
+      if (!payload) return null;
+      if (typeof payload === "string" || typeof payload === "number") {
+        return this.normalizeProductId(payload);
+      }
+      const firstPass = [
+        payload.productId,
+        payload.product_id,
+        payload.productID,
+        payload.objectID,
+        payload.product?.id,
+        payload.product?.product_id,
+        payload.product?.objectID,
+        payload.item?.productId,
+        payload.item?.product_id,
+        payload.lineItem?.productId,
+        payload.lineItem?.product_id,
+        payload.line_item?.productId,
+        payload.line_item?.product_id,
+        payload.cartItem?.productId,
+        payload.cartItem?.product_id,
+        payload.data?.productId,
+        payload.data?.product_id
+      ];
+      for (const candidate of firstPass) {
+        const normalized = this.normalizeProductId(candidate);
+        if (normalized) return normalized;
+      }
+      const urlCandidates = [
+        payload.url,
+        payload.productUrl,
+        payload.product_url,
+        payload.product?.url,
+        payload.item?.url
+      ];
+      for (const url of urlCandidates) {
+        if (typeof url !== "string") continue;
+        const match = url.match(/\/p(\d+)(?:$|\/|\?)/);
+        if (match?.[1]) {
+          const normalized = this.normalizeProductId(match[1]);
+          if (normalized) return normalized;
+        }
+      }
+      return null;
+    }
+    normalizeAndUniqueIds(ids) {
+      if (!Array.isArray(ids)) return [];
+      const seen = /* @__PURE__ */ new Set();
+      const uniqueIds = [];
+      ids.forEach((id) => {
+        const normalized = this.normalizeProductId(id);
+        if (!normalized || seen.has(normalized)) return;
+        seen.add(normalized);
+        uniqueIds.push(normalized);
+      });
+      return uniqueIds;
+    }
+    normalizeProductId(value) {
+      if (value === null || value === void 0) return null;
+      const stringValue = String(value).trim();
+      if (!stringValue) return null;
+      const digits = this.toEnglishDigits(stringValue).match(/\d+/g);
+      if (!digits || digits.length === 0) return null;
+      return digits.join("");
+    }
+    toEnglishDigits(text) {
+      return String(text || "").replace(/[٠-٩]/g, (digit) => String(digit.charCodeAt(0) - 1632)).replace(/[۰-۹]/g, (digit) => String(digit.charCodeAt(0) - 1776));
+    }
+  };
+  if (!window.__gomlaModalRerankInstance) {
+    window.__gomlaModalRerankInstance = new GomlaModalRerank();
+  }
+  var gomla_modal_rerank_default = window.__gomlaModalRerankInstance;
+
   // index.js
   window.productRecommendations = product_recommendations_default;
   window.redisService = redisService;
@@ -2636,6 +2938,155 @@
       subtree: true
     });
   }
+  function injectCartAddonsStyles() {
+    if (document.getElementById("cart-addons-slider-styles")) return;
+    const style = document.createElement("style");
+    style.id = "cart-addons-slider-styles";
+    style.textContent = `
+    cart-addons-slider.cart-addons-wrapper {
+      position: relative;
+      margin-top: 1rem;
+      overflow: hidden;
+      border-radius: 0.5rem;
+      border: 1px solid rgba(229, 231, 235, 1);
+      background-color: #fff;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+      display: block;
+    }
+    cart-addons-slider .cart-addons-title {
+      display: flex;
+      width: 100%;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.75rem 1rem;
+      font-size: 0.875rem;
+      line-height: 1.25rem;
+      font-weight: 500;
+      background-color: #f9fafb;
+      color: #111827;
+      border-bottom: 1px solid rgba(229, 231, 235, 1);
+    }
+    cart-addons-slider salla-products-list {
+      opacity: 1;
+      transition: opacity 0.3s ease-in-out;
+      display: block;
+    }
+    cart-addons-slider .s-products-list-wrapper {
+      display: flex !important;
+      gap: 0.5rem;
+      overflow-x: auto;
+      padding: 0.75rem 1rem 0.5rem;
+      scroll-behavior: smooth;
+      scroll-snap-type: x mandatory;
+      -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    cart-addons-slider .s-products-list-wrapper::-webkit-scrollbar {
+      display: none;
+    }
+    cart-addons-slider .s-product-card-entry {
+      flex: none;
+      width: 160px;
+      scroll-snap-align: start;
+      opacity: 1 !important;
+      visibility: visible !important;
+    }
+    cart-addons-slider .s-product-card-image {
+      position: relative;
+      aspect-ratio: 2 / 3;
+      height: auto !important;
+    }
+    cart-addons-slider .s-product-card-image img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 1 !important;
+    }
+    cart-addons-slider .s-product-card-content {
+      padding: 0.25rem;
+    }
+    cart-addons-slider .s-product-card-content .s-product-card-content-title {
+      margin-bottom: 0.125rem;
+      font-size: 0.75rem;
+      line-height: 1rem;
+    }
+    cart-addons-slider .s-product-card-content .s-product-card-content-title a {
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+    cart-addons-slider .s-product-card-content .s-product-card-content-sub {
+      font-size: 0.75rem;
+      line-height: 1rem;
+      gap: 0.125rem;
+    }
+    cart-addons-slider .s-product-card-content .s-product-card-sale-price h4,
+    cart-addons-slider .s-product-card-content .s-product-card-sale-price span {
+      font-size: 0.75rem;
+      line-height: 1rem;
+    }
+    cart-addons-slider .s-product-card-content .s-product-card-content-footer {
+      margin-top: 0.125rem;
+    }
+    cart-addons-slider .s-product-card-content .s-product-card-content-footer salla-button {
+      transform: scale(0.75);
+      margin-left: -0.75rem;
+      margin-right: -0.75rem;
+    }
+    cart-addons-slider .touch-indicator {
+      position: absolute;
+      bottom: 0;
+      left: 50%;
+      width: 2.5rem;
+      height: 0.25rem;
+      background-color: rgba(229, 231, 235, 1);
+      opacity: 0.6;
+      border-radius: 9999px;
+      transform: translateX(-50%);
+      margin-bottom: 0.25rem;
+    }
+    @media (min-width: 768px) {
+      cart-addons-slider .touch-indicator {
+        display: none;
+      }
+    }
+  `;
+    document.head.appendChild(style);
+  }
+  function runCartAddonsInjection() {
+    injectCartAddonsStyles();
+    const ensure = () => {
+      const submitButton = document.querySelector("#cart-submit");
+      if (!submitButton) return false;
+      const submitWrap = submitButton.closest(".cart-submit-wrap") || submitButton.parentElement;
+      const parent = submitWrap?.parentElement || submitWrap;
+      if (!parent) return false;
+      if (parent.querySelector("cart-addons-slider")) {
+        return true;
+      }
+      const slider = document.createElement("cart-addons-slider");
+      slider.className = "cart-addons-wrapper";
+      if (submitWrap && parent) {
+        parent.insertBefore(slider, submitWrap.nextSibling);
+      } else {
+        parent.appendChild(slider);
+      }
+      console.log("[Algolia Bundle] Injected cart addons slider");
+      return true;
+    };
+    if (document.querySelector("cart-addons-slider")) return;
+    if (ensure()) return;
+    const observer = new MutationObserver((mutations, obs) => {
+      if (ensure()) {
+        obs.disconnect();
+      }
+    });
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true
+    });
+  }
   onReady(() => {
     runHomepageInjection();
     const isProductPage = document.querySelector('[id^="product-"]');
@@ -2645,6 +3096,9 @@
         console.log("\u2705 [Algolia Bundle] Product recommendations initialized");
       }, 3e3);
     }
+    if (document.querySelector('form[id^="item-"]') || document.querySelector("#cart-submit")) {
+      setTimeout(runCartAddonsInjection, 500);
+    }
     console.log("\u2705 [Algolia Bundle] Loaded successfully");
   });
   document.addEventListener("salla::page::changed", () => {
@@ -2652,6 +3106,7 @@
     setTimeout(() => {
       product_recommendations_default.initialize();
     }, 1e3);
+    setTimeout(runCartAddonsInjection, 500);
   });
   document.addEventListener("theme::ready", () => {
     if (!document.querySelector('[id^="product-"]')) return;

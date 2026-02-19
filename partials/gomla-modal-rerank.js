@@ -10,15 +10,15 @@ class GomlaModalRerank {
         this.processTimer = null;
         this.pending = false;
         this.needsReprocess = false;
-        this.onClickCapture = this.handleClickCapture.bind(this);
+        this.gridOriginalHtml = new WeakMap();
+        this.gridAppliedKey = new WeakMap();
         this.onDocumentCartAdded = this.handleDocumentCartAdded.bind(this);
-        this.onPageChanged = this.scheduleProcess.bind(this);
+        this.onPageChanged = this.handlePageChanged.bind(this);
         this.onSallaReady = this.tryHookSallaCartEvent.bind(this);
         this.initialize();
     }
 
     initialize() {
-        document.addEventListener('click', this.onClickCapture, true);
         document.addEventListener('salla::cart::item.added', this.onDocumentCartAdded);
         document.addEventListener('salla::ready', this.onSallaReady);
         document.addEventListener('theme::ready', this.onSallaReady);
@@ -80,78 +80,146 @@ class GomlaModalRerank {
     async processGrid(grid) {
         if (!grid) return;
 
-        const preSignature = this.buildGridSignature(grid);
-        if (grid.dataset.gomlaRerankSignature === preSignature) return;
+        this.captureOriginalGrid(grid);
+        if (!this.gridOriginalHtml.has(grid)) return;
 
-        // Always filter low-priced items first.
-        this.filterProductsByMinimumPrice(grid, MIN_PRICE_SAR);
-
-        if (this.lastAddedProductId) {
-            const frequentlyBoughtIds = await redisService.getFrequentlyBought(this.lastAddedProductId);
-            if (Array.isArray(frequentlyBoughtIds) && frequentlyBoughtIds.length > 0) {
-                this.reorderGridMatchedThenUnmatched(grid, frequentlyBoughtIds);
-            }
+        if (!this.lastAddedProductId) {
+            this.restoreOriginalGrid(grid);
+            return;
         }
 
-        grid.dataset.gomlaRerankSignature = this.buildGridSignature(grid);
+        const frequentlyBoughtIds = this.normalizeAndUniqueIds(
+            await redisService.getFrequentlyBought(this.lastAddedProductId)
+        );
+        if (!frequentlyBoughtIds.length) {
+            this.restoreOriginalGrid(grid);
+            return;
+        }
+
+        const renderKey = `${this.lastAddedProductId}|${frequentlyBoughtIds.join(',')}`;
+        if (this.gridAppliedKey.get(grid) === renderKey && this.hasSelectedList(grid)) return;
+
+        this.renderSelectedProducts(grid, frequentlyBoughtIds);
+        this.gridAppliedKey.set(grid, renderKey);
+        this.applyOrderAndMinimumPrice(grid, frequentlyBoughtIds, MIN_PRICE_SAR);
     }
 
-    filterProductsByMinimumPrice(grid, minPrice) {
-        const items = Array.from(grid.querySelectorAll('.gomla__popup-item'));
-        items.forEach((item) => {
-            const price = this.extractItemPrice(item);
-            if (!Number.isFinite(price)) return;
-            if (price < minPrice) {
-                item.remove();
+    captureOriginalGrid(grid) {
+        if (this.gridOriginalHtml.has(grid)) return;
+        const hasOriginalCards = grid.querySelector('.gomla__popup-item .gomla__product-card[data-product-id]');
+        if (!hasOriginalCards) return;
+        this.gridOriginalHtml.set(grid, grid.innerHTML);
+    }
+
+    restoreOriginalGrid(grid) {
+        const originalHtml = this.gridOriginalHtml.get(grid);
+        if (typeof originalHtml !== 'string') return;
+        if (grid.innerHTML !== originalHtml) {
+            grid.innerHTML = originalHtml;
+            window.salla?.event?.dispatch?.('twilight::mutation');
+        }
+        this.gridAppliedKey.delete(grid);
+    }
+
+    renderSelectedProducts(grid, orderedIds) {
+        const list = document.createElement('salla-products-list');
+        list.setAttribute('source', 'selected');
+        list.setAttribute('source-value', JSON.stringify(orderedIds));
+        list.setAttribute('limit', String(orderedIds.length));
+        list.setAttribute('loading', 'lazy');
+        list.className = 's-products-list-vertical-cards';
+
+        grid.innerHTML = '';
+        grid.appendChild(list);
+        window.salla?.event?.dispatch?.('twilight::mutation');
+    }
+
+    hasSelectedList(grid) {
+        return !!grid.querySelector('salla-products-list[source="selected"]');
+    }
+
+    applyOrderAndMinimumPrice(grid, orderedIds, minPrice, maxAttempts = 40) {
+        let attempt = 0;
+        const intervalId = setInterval(() => {
+            attempt += 1;
+
+            const cards = this.getRenderedCards(grid);
+            if (cards.length > 0) {
+                clearInterval(intervalId);
+                this.reorderRenderedCards(cards, orderedIds);
+                this.filterRenderedCardsByMinimumPrice(grid, minPrice);
+                return;
             }
-        });
+
+            if (attempt >= maxAttempts) {
+                clearInterval(intervalId);
+            }
+        }, 100);
     }
 
-    reorderGridMatchedThenUnmatched(grid, orderedIds) {
-        const items = Array.from(grid.querySelectorAll('.gomla__popup-item'));
-        if (!items.length) return;
+    getRenderedCards(grid) {
+        const entryCards = Array.from(grid.querySelectorAll('.s-product-card-entry'));
+        if (entryCards.length > 0) return entryCards;
+        return Array.from(grid.querySelectorAll('custom-salla-product-card'));
+    }
 
-        const itemsByProductId = new Map();
-        items.forEach((item) => {
-            const card = item.querySelector('.gomla__product-card[data-product-id]');
-            const productId = this.normalizeProductId(card?.dataset?.productId);
+    reorderRenderedCards(cards, orderedIds) {
+        if (!cards.length) return;
+        const parent = cards[0].parentNode;
+        if (!parent) return;
+
+        const cardMap = new Map();
+        cards.forEach((card) => {
+            const productId = this.extractRenderedCardProductId(card);
             if (!productId) return;
 
-            if (!itemsByProductId.has(productId)) {
-                itemsByProductId.set(productId, []);
+            if (!cardMap.has(productId)) {
+                cardMap.set(productId, []);
             }
-            itemsByProductId.get(productId).push(item);
+            cardMap.get(productId).push(card);
         });
 
-        const matched = [];
         orderedIds.forEach((rawId) => {
             const productId = this.normalizeProductId(rawId);
             if (!productId) return;
-
-            const queue = itemsByProductId.get(productId);
+            const queue = cardMap.get(productId);
             if (!queue || queue.length === 0) return;
-            matched.push(queue.shift());
-        });
-
-        const matchedSet = new Set(matched);
-        const unmatched = items.filter((item) => !matchedSet.has(item));
-        const finalOrder = matched.concat(unmatched);
-        finalOrder.forEach((item) => {
-            grid.appendChild(item);
+            parent.appendChild(queue.shift());
         });
     }
 
-    buildGridSignature(grid) {
-        const ids = Array.from(grid.querySelectorAll('.gomla__popup-item .gomla__product-card[data-product-id]'))
-            .map((card) => this.normalizeProductId(card.dataset.productId))
-            .filter(Boolean);
-        const idPart = ids.join(',');
-        const productPart = this.lastAddedProductId || 'none';
-        return `${productPart}|${idPart}`;
+    extractRenderedCardProductId(card) {
+        if (!card) return null;
+
+        const fromDataId = this.normalizeProductId(card.dataset?.id);
+        if (fromDataId) return fromDataId;
+
+        const fromIdAttr = this.normalizeProductId(card.id);
+        if (fromIdAttr) return fromIdAttr;
+
+        const link = card.querySelector('.s-product-card-image a, .s-product-card-content-title a, a[href*="/product/"]');
+        if (link?.href) {
+            const match = link.href.match(/\/product\/[^\/]+\/(\d+)/);
+            if (match?.[1]) return this.normalizeProductId(match[1]);
+        }
+
+        return null;
     }
 
-    extractItemPrice(item) {
-        const priceNode = item.querySelector('.gomla__product-card__price');
+    filterRenderedCardsByMinimumPrice(grid, minPrice) {
+        const cards = this.getRenderedCards(grid);
+        cards.forEach((card) => {
+            const price = this.extractRenderedCardPrice(card);
+            if (!Number.isFinite(price)) return;
+            if (price < minPrice) {
+                card.remove();
+            }
+        });
+    }
+
+    extractRenderedCardPrice(card) {
+        const priceNode = card.querySelector('.s-product-card-sale-price h4')
+            || card.querySelector('.s-product-card-content-sub h4');
         if (!priceNode) return NaN;
 
         const normalizedText = this.toEnglishDigits(priceNode.textContent || '');
@@ -162,47 +230,10 @@ class GomlaModalRerank {
         return Number.isFinite(price) ? price : NaN;
     }
 
-    handleClickCapture(event) {
-        const target = event.target;
-        if (!(target instanceof Element)) return;
-
-        const fromDataAttr = this.normalizeProductId(
-            target.closest('[data-product-id]')?.getAttribute('data-product-id')
-        );
-        if (fromDataAttr) {
-            this.setLastAddedProductId(fromDataAttr);
-            return;
-        }
-
-        const form = target.closest('form');
-        const formProductId = this.normalizeProductId(
-            form?.querySelector('input[name="id"], input[name="product_id"], input[name="productId"]')?.value
-        );
-        if (formProductId) {
-            this.setLastAddedProductId(formProductId);
-            return;
-        }
-
-        const fromCard = this.normalizeProductId(
-            target.closest('.s-product-card-entry')?.getAttribute('data-id')
-        );
-        if (fromCard) {
-            this.setLastAddedProductId(fromCard);
-        }
-    }
-
     handleDocumentCartAdded(event) {
         const detailId = this.extractProductIdFromPayload(event?.detail);
         if (detailId) {
             this.setLastAddedProductId(detailId);
-            return;
-        }
-
-        const fallbackFromTarget = this.normalizeProductId(
-            event?.target?.closest?.('[data-product-id]')?.getAttribute?.('data-product-id')
-        );
-        if (fallbackFromTarget) {
-            this.setLastAddedProductId(fallbackFromTarget);
         }
     }
 
@@ -226,6 +257,11 @@ class GomlaModalRerank {
         const normalized = this.normalizeProductId(productId);
         if (!normalized) return;
         this.lastAddedProductId = normalized;
+        this.scheduleProcess();
+    }
+
+    handlePageChanged() {
+        this.lastAddedProductId = null;
         this.scheduleProcess();
     }
 
@@ -261,17 +297,6 @@ class GomlaModalRerank {
             if (normalized) return normalized;
         }
 
-        const secondPass = [
-            payload.id,
-            payload.item?.id,
-            payload.data?.id
-        ];
-
-        for (const candidate of secondPass) {
-            const normalized = this.normalizeProductId(candidate);
-            if (normalized) return normalized;
-        }
-
         const urlCandidates = [
             payload.url,
             payload.productUrl,
@@ -290,6 +315,21 @@ class GomlaModalRerank {
         }
 
         return null;
+    }
+
+    normalizeAndUniqueIds(ids) {
+        if (!Array.isArray(ids)) return [];
+        const seen = new Set();
+        const uniqueIds = [];
+
+        ids.forEach((id) => {
+            const normalized = this.normalizeProductId(id);
+            if (!normalized || seen.has(normalized)) return;
+            seen.add(normalized);
+            uniqueIds.push(normalized);
+        });
+
+        return uniqueIds;
     }
 
     normalizeProductId(value) {
