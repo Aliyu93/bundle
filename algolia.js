@@ -2610,12 +2610,14 @@
       this.needsReprocess = false;
       this.gridOriginalHtml = /* @__PURE__ */ new WeakMap();
       this.gridAppliedKey = /* @__PURE__ */ new WeakMap();
+      this.onClickCapture = this.handleGomlaProductNavigation.bind(this);
       this.onDocumentCartAdded = this.handleDocumentCartAdded.bind(this);
       this.onPageChanged = this.handlePageChanged.bind(this);
       this.onSallaReady = this.tryHookSallaCartEvent.bind(this);
       this.initialize();
     }
     initialize() {
+      document.addEventListener("click", this.onClickCapture, true);
       document.addEventListener("salla::cart::item.added", this.onDocumentCartAdded);
       document.addEventListener("salla::ready", this.onSallaReady);
       document.addEventListener("theme::ready", this.onSallaReady);
@@ -2863,6 +2865,28 @@
       finalOrder.forEach((item) => {
         track.appendChild(item);
       });
+    }
+    handleGomlaProductNavigation(event) {
+      const target = event.target;
+      if (!(target instanceof Element)) return;
+      const gomlaScope = target.closest(".gomla-modal, .gomla__addon-bundle-container");
+      if (!gomlaScope) return;
+      const interactive = target.closest(
+        ".gomla__product-card__actions, .gomla__product-card__cta-btn, .gomla__carousel-nav, .gomla-modal__close, button, a, input, select, textarea, label"
+      );
+      if (interactive) return;
+      const productClickArea = target.closest(".gomla__product-card__main, .gomla__product-card__image, .gomla__product-card__name");
+      if (!productClickArea) return;
+      const card = target.closest(".gomla__product-card[data-product-id]");
+      if (!card) return;
+      const productId = this.normalizeProductId(card.dataset.productId);
+      if (!productId) return;
+      event.preventDefault();
+      if (typeof event.stopImmediatePropagation === "function") {
+        event.stopImmediatePropagation();
+      }
+      event.stopPropagation();
+      window.location.assign(`/p${productId}`);
     }
     handleDocumentCartAdded(event) {
       const detailId = this.extractProductIdFromPayload(event?.detail);

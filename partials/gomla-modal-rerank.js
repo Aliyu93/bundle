@@ -12,6 +12,7 @@ class GomlaModalRerank {
         this.needsReprocess = false;
         this.gridOriginalHtml = new WeakMap();
         this.gridAppliedKey = new WeakMap();
+        this.onClickCapture = this.handleGomlaProductNavigation.bind(this);
         this.onDocumentCartAdded = this.handleDocumentCartAdded.bind(this);
         this.onPageChanged = this.handlePageChanged.bind(this);
         this.onSallaReady = this.tryHookSallaCartEvent.bind(this);
@@ -19,6 +20,7 @@ class GomlaModalRerank {
     }
 
     initialize() {
+        document.addEventListener('click', this.onClickCapture, true);
         document.addEventListener('salla::cart::item.added', this.onDocumentCartAdded);
         document.addEventListener('salla::ready', this.onSallaReady);
         document.addEventListener('theme::ready', this.onSallaReady);
@@ -324,6 +326,38 @@ class GomlaModalRerank {
         finalOrder.forEach((item) => {
             track.appendChild(item);
         });
+    }
+
+    handleGomlaProductNavigation(event) {
+        const target = event.target;
+        if (!(target instanceof Element)) return;
+
+        const gomlaScope = target.closest('.gomla-modal, .gomla__addon-bundle-container');
+        if (!gomlaScope) return;
+
+        // Preserve all interactive controls (add-to-cart buttons, carousel nav, modal close, etc.)
+        const interactive = target.closest(
+            '.gomla__product-card__actions, .gomla__product-card__cta-btn, .gomla__carousel-nav, .gomla-modal__close, button, a, input, select, textarea, label'
+        );
+        if (interactive) return;
+
+        // Only hijack clicks on product "content area" (image/title/main block)
+        const productClickArea = target.closest('.gomla__product-card__main, .gomla__product-card__image, .gomla__product-card__name');
+        if (!productClickArea) return;
+
+        const card = target.closest('.gomla__product-card[data-product-id]');
+        if (!card) return;
+
+        const productId = this.normalizeProductId(card.dataset.productId);
+        if (!productId) return;
+
+        event.preventDefault();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+        event.stopPropagation();
+
+        window.location.assign(`/p${productId}`);
     }
 
     handleDocumentCartAdded(event) {
