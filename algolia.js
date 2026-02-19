@@ -2872,7 +2872,7 @@
       const gomlaScope = target.closest(".gomla-modal, .gomla__addon-bundle-container");
       if (!gomlaScope) return;
       const interactive = target.closest(
-        ".gomla__product-card__actions, .gomla__product-card__cta-btn, .gomla__carousel-nav, .gomla-modal__close, button, a, input, select, textarea, label"
+        ".gomla__product-card__actions, .gomla__product-card__cta-btn, .gomla__carousel-nav, .gomla-modal__close, button, input, select, textarea, label"
       );
       if (interactive) return;
       const productClickArea = target.closest(".gomla__product-card__main, .gomla__product-card__image, .gomla__product-card__name");
@@ -2886,7 +2886,78 @@
         event.stopImmediatePropagation();
       }
       event.stopPropagation();
-      window.location.assign(`/p${productId}`);
+      const productUrl = this.resolveGomlaProductUrl(event, card, productId);
+      window.location.assign(productUrl);
+    }
+    resolveGomlaProductUrl(event, card, productId) {
+      const candidates = [];
+      const composedPath = typeof event.composedPath === "function" ? event.composedPath() : [];
+      composedPath.forEach((node) => {
+        if (!(node instanceof Element)) return;
+        if (node.tagName !== "A") return;
+        const href = node.getAttribute("href") || node.href;
+        if (href) {
+          candidates.push(href);
+        }
+      });
+      const item = card.closest(".gomla__carousel-item, .gomla__popup-item");
+      const host = card.closest("gomla-product-card");
+      [card, item, host].forEach((element) => {
+        if (!element) return;
+        candidates.push(
+          element.getAttribute("data-product-url"),
+          element.getAttribute("data-product-link"),
+          element.getAttribute("data-url"),
+          element.getAttribute("data-link"),
+          element.getAttribute("href"),
+          element.dataset?.productUrl,
+          element.dataset?.productLink,
+          element.dataset?.url,
+          element.dataset?.link
+        );
+      });
+      candidates.push(
+        card.querySelector("a[href]")?.getAttribute("href")
+      );
+      for (const rawUrl of candidates) {
+        const normalized = this.normalizeNavigableUrl(rawUrl);
+        if (!normalized) continue;
+        return this.mergeWithCurrentQueryAndHash(normalized);
+      }
+      return this.buildFallbackProductUrl(card, productId);
+    }
+    normalizeNavigableUrl(rawUrl) {
+      if (typeof rawUrl !== "string") return null;
+      const trimmed = rawUrl.trim();
+      if (!trimmed || trimmed === "#" || /^javascript:/i.test(trimmed)) return null;
+      return trimmed;
+    }
+    mergeWithCurrentQueryAndHash(rawUrl) {
+      try {
+        const currentUrl = new URL(window.location.href);
+        const targetUrl = new URL(rawUrl, window.location.origin);
+        currentUrl.searchParams.forEach((value, key) => {
+          if (!targetUrl.searchParams.has(key)) {
+            targetUrl.searchParams.set(key, value);
+          }
+        });
+        if (!targetUrl.hash && currentUrl.hash) {
+          targetUrl.hash = currentUrl.hash;
+        }
+        if (targetUrl.origin === window.location.origin) {
+          return `${targetUrl.pathname}${targetUrl.search}${targetUrl.hash}`;
+        }
+        return targetUrl.toString();
+      } catch (_error) {
+        return rawUrl;
+      }
+    }
+    buildFallbackProductUrl(card, productId) {
+      const rawName = (card.querySelector(".gomla__product-card__name")?.textContent || "product").trim();
+      const normalizedName = this.toEnglishDigits(rawName).replace(/[^\u0600-\u06FFa-zA-Z0-9\s-]/g, " ").replace(/\s+/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+      const safeName = normalizedName || "product";
+      const path = `/${encodeURIComponent(safeName)}/p${productId}`;
+      return this.mergeWithCurrentQueryAndHash(path);
     }
     handleDocumentCartAdded(event) {
       const detailId = this.extractProductIdFromPayload(event?.detail);
