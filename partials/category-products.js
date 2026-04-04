@@ -46,6 +46,7 @@ class CategoryProductsComponent extends HTMLElement {
             476899183: { name: "جلابيات", url: "https://darlena.com/%D8%AC%D9%84%D8%A7%D8%A8%D9%8A%D8%A7%D8%AA/c476899183" },
             1466412179: { name: "جديدنا", url: "https://darlena.com/%D8%AC%D8%AF%D9%8A%D8%AF-%D8%AF%D8%A7%D8%B1-%D9%84%D9%8A%D9%86%D8%A7/c1466412179" },
             289250285: { name: "عبايات كلوش", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%83%D9%84%D9%88%D8%B4/c289250285" },
+            1028157307: { name: "عبايات كلوش مطرزة", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%83%D9%84%D9%88%D8%B4-%D9%85%D8%B7%D8%B1%D8%B2%D8%A9/c1028157307" },
             1891285357: { name: "عبايات سوداء سادة", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B3%D9%88%D8%AF%D8%A7%D8%A1-%D8%B3%D8%A7%D8%AF%D8%A9/c1891285357" },
             2132455494: { name: "عبايات ملونة", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D9%84%D9%88%D9%86%D8%A9/c2132455494" },
             940975465: { name: "عبايات بجيوب", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%A8%D8%AC%D9%8A%D9%88%D8%A8/c940975465" },
@@ -53,7 +54,6 @@ class CategoryProductsComponent extends HTMLElement {
             832995956: { name: "عبايات مطرزة", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D9%85%D8%B7%D8%B1%D8%B2%D8%A9/c832995956" },
             2031226480: { name: "عبايات رأس", url: "https://darlena.com/%D8%B9%D8%A8%D8%A7%D9%8A%D8%A7%D8%AA-%D8%B1%D8%A3%D8%B3/c2031226480" },
             270965526: { name: "شتاء 2026", url: "https://darlena.com/%D8%B4%D8%AA%D8%A7%D8%A1-2026/c270965526" },
-            2072839792: { name: "رمضان 2026", url: "https://darlena.com/%D8%B1%D9%85%D8%B6%D8%A7%D9%86-2026/c2072839792" },
             692927841: { name: "طرح", url: "https://darlena.com/%D8%B7%D8%B1%D8%AD/c692927841" },
             639447590: { name: "نقابات", url: "https://darlena.com/%D9%86%D9%82%D8%A7%D8%A8%D8%A7%D8%AA/c639447590" },
             114756598: { name: "عبايات شيفون", url: "https://darlena.com/%D8%B4%D9%8A%D9%81%D9%88%D9%86/c114756598" },
@@ -62,7 +62,7 @@ class CategoryProductsComponent extends HTMLElement {
         };
         const priorityOrder = {
             'ترند الان': 1,
-            'رمضان 2026': 2,
+            'عبايات كلوش مطرزة': 2,
             'جلابيات': 3,
             'جديدنا': 4,
             'جميع العبايات': 5,
