@@ -132,8 +132,8 @@ class CartAddonsSlider extends HTMLElement {
 
         const language = (document.documentElement.getAttribute('lang') || '').toLowerCase().slice(0, 2);
         const fallbackTitles = {
-            ar: 'أضيفي منتج واحصلي على خصم 15%',
-            en: 'Add a product & get 15% off'
+            ar: 'أضيفي منتج واحصلي على خصم 25%',
+            en: 'Add a product & get 25% off'
         };
 
         return fallbackTitles[language] || fallbackTitles.en;
@@ -274,7 +274,7 @@ class CartAddonsSlider extends HTMLElement {
     }
 
     applyDiscount() {
-        const DISCOUNT = 0.85;
+        const DISCOUNT = 0.75;
         const apply = () => {
             const cards = this.querySelectorAll('.s-product-card-entry');
             if (cards.length === 0) return false;
