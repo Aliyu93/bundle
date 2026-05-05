@@ -28,6 +28,88 @@ import './partials/gomla-modal-rerank.js'; // Re-rank Gomla modal products using
 window.productRecommendations = productRecommendations;
 window.redisService = redisService;
 
+function getSallaStoreId() {
+  return window.salla?.config?.get?.('store.id')
+    || window.salla?.config?.properties_?.store?.id
+    || null;
+}
+
+function getSallaLanguage() {
+  return window.salla?.config?.get?.('user.language_code')
+    || window.salla?.lang?.locale
+    || document.documentElement.getAttribute('lang')
+    || null;
+}
+
+function withSallaSelectedProductsScope(rawUrl) {
+  const url = new URL(String(rawUrl), window.location.href);
+
+  if (
+    url.hostname !== 'api.salla.dev'
+    || url.pathname !== '/store/v1/products'
+    || url.searchParams.get('source') !== 'selected'
+  ) {
+    return rawUrl;
+  }
+
+  const storeId = getSallaStoreId();
+  const language = getSallaLanguage();
+
+  if (storeId && !url.searchParams.has('store_id')) {
+    url.searchParams.set('store_id', String(storeId));
+  }
+
+  if (language && !url.searchParams.has('lang')) {
+    url.searchParams.set('lang', String(language).slice(0, 2));
+  }
+
+  return url.toString();
+}
+
+function installSallaSelectedProductsScopePatch() {
+  if (window.__darlenaSelectedProductsScopePatchInstalled || typeof window.fetch !== 'function') {
+    return;
+  }
+
+  const originalFetch = window.fetch.bind(window);
+  window.__darlenaSelectedProductsScopePatchInstalled = true;
+
+  window.fetch = (input, init) => {
+    try {
+      const request = input instanceof Request ? input : null;
+      const originalUrl = request ? request.url : input;
+      const scopedUrl = withSallaSelectedProductsScope(originalUrl);
+
+      if (scopedUrl !== originalUrl) {
+        input = request
+          ? new Request(scopedUrl, request)
+          : scopedUrl;
+      }
+    } catch (error) {
+      // Leave the original request untouched if URL parsing is not possible.
+    }
+
+    return originalFetch(input, init);
+  };
+
+  const xhrPrototype = window.XMLHttpRequest?.prototype;
+  if (xhrPrototype?.open) {
+    const originalOpen = xhrPrototype.open;
+
+    xhrPrototype.open = function(method, url, ...args) {
+      try {
+        url = withSallaSelectedProductsScope(url);
+      } catch (error) {
+        // Leave the original request untouched if URL parsing is not possible.
+      }
+
+      return originalOpen.call(this, method, url, ...args);
+    };
+  }
+}
+
+installSallaSelectedProductsScopePatch();
+
 // DOM-ready helper
 const onReady = (fn) =>
   document.readyState === 'loading'
