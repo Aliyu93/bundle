@@ -63,6 +63,10 @@ function withSallaSelectedProductsScope(rawUrl) {
     url.searchParams.set('lang', String(language).slice(0, 2));
   }
 
+  if (!url.searchParams.has('page') && !url.searchParams.has('cursor')) {
+    url.searchParams.set('page', '1');
+  }
+
   return url.toString();
 }
 
