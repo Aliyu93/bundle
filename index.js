@@ -67,6 +67,8 @@ function withSallaSelectedProductsScope(rawUrl) {
     url.searchParams.set('page', '1');
   }
 
+  url.searchParams.set('_darlena_selected_cache_bust', String(Date.now()));
+
   return url.toString();
 }
 
